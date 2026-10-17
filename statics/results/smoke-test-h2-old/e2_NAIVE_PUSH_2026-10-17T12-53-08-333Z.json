@@ -1,0 +1,23 @@
+{
+  "experiment": "E2",
+  "mode": "NAIVE_PUSH",
+  "orders": 200,
+  "ratePerSec": 10,
+  "outageMs": 3000,
+  "dropEveryMs": 10000,
+  "outages": 1,
+  "ordersCreated": 200,
+  "receivedByKitchen": 169,
+  "lostOrders": 31,
+  "lossRatePercent": 15.5,
+  "duplicateDeliveriesToApp": 0,
+  "duplicatesFilteredBySeq": 0,
+  "gapsDetected": 0,
+  "resumeRequests": 0,
+  "replayedEvents": 0,
+  "reconnects": 1,
+  "resyncTimeMs": {
+    "count": 0
+  },
+  "httpErrors": 0
+}

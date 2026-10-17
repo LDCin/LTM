@@ -1,0 +1,62 @@
+server:
+  port: 8080
+  tomcat:
+    # Tomcat dùng NIO connector: một kết nối (kể cả WebSocket) đang rảnh KHÔNG chiếm thread.
+    threads:
+      max: 200          # số thread tối đa xử lý request đồng thời
+      min-spare: 10
+    max-connections: 2000   # tổng số kết nối TCP tối đa server giữ cùng lúc
+    accept-count: 100       # hàng đợi kết nối chờ khi đã đủ max-connections
+    connection-timeout: 10s
+
+spring:
+  application:
+    name: qrorder-server
+  datasource:
+    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:qrorder}?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&characterEncoding=UTF-8
+    username: ${DB_USER:root}
+    password: ${DB_PASSWORD:root}
+    hikari:
+      maximum-pool-size: 20     # giới hạn kết nối DB -> bảo vệ MySQL khi tải cao
+      minimum-idle: 5
+      connection-timeout: 3000  # hết connection trong 3s -> trả 503 thay vì treo request
+  jdbc:
+    template:
+      query-timeout: 3s
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema.sql
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics
+
+app:
+  # POLLING | NAIVE_PUSH | RELIABLE_PUSH  (đổi lúc chạy qua PUT /api/admin/settings)
+  delivery-mode: RELIABLE_PUSH
+  idempotency-enabled: true
+  optimistic-lock-enabled: true
+  polling-interval-ms: 3000
+  auth-secret: ${AUTH_SECRET:ltm-qrorder-demo-secret-change-me}
+  auth-token-ttl-ms: 43200000
+  rate-limit:
+    enabled: true
+    trust-forwarded-for: false   # chỉ bật khi chạy thực nghiệm giả lập nhiều IP
+    order-capacity: 5            # mỗi bàn đặt tối đa 5 đơn liên tiếp...
+    order-refill-per-minute: 5   # ...và hồi 5 đơn mỗi phút
+    api-capacity: 60             # mỗi IP: burst 60 request...
+    api-refill-per-second: 20    # ...hồi 20 request/giây
+  ws:
+    heartbeat-ms: 10000
+    max-connections-per-table: 8
+    send-time-limit-ms: 10000
+    send-buffer-size-limit: 524288
+    message-size-limit: 65536
+    replay-batch-limit: 500
+
+logging:
+  level:
+    com.ltm.qrorder: INFO

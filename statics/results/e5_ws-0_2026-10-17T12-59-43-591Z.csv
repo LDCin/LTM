@@ -1,0 +1,4 @@
+concurrentClients,throughputPerSec,errorRatePercent,p50,p95,p99,cpuMean
+10,2536.1,0,3.44,7.22,9.65,28.77
+50,3208.6,0,14.93,20.87,33.55,13.89
+100,3197,0,29.96,39.82,54.72,14.49

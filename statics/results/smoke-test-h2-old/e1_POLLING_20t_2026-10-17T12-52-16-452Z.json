@@ -1,0 +1,45 @@
+{
+  "experiment": "E1",
+  "mode": "POLLING",
+  "tables": 20,
+  "durationSec": 20,
+  "orderIntervalMs": 5000,
+  "ordersCreated": 80,
+  "deliveredToKitchen": 80,
+  "notDelivered": 0,
+  "httpErrors": 0,
+  "orderToKitchenLatencyMs": {
+    "count": 80,
+    "min": 37.5,
+    "mean": 1431.64,
+    "p50": 1384.23,
+    "p95": 2753.36,
+    "p99": 3019.26,
+    "max": 3019.26
+  },
+  "placeOrderHttpLatencyMs": {
+    "count": 80,
+    "min": 3.31,
+    "mean": 6.03,
+    "p50": 5.86,
+    "p95": 8.73,
+    "p99": 10.24,
+    "max": 10.24
+  },
+  "kitchen": {
+    "pollRequests": 11,
+    "pollRequestsPerSec": 0.55,
+    "pollPayloadBytes": 50943,
+    "wsBytesIn": 0,
+    "wsFramesIn": 0
+  },
+  "serverCpuPercent": {
+    "count": 29,
+    "min": 0,
+    "mean": 0.77,
+    "p50": 0.26,
+    "p95": 1.54,
+    "p99": 8.46,
+    "max": 8.46
+  }
+}

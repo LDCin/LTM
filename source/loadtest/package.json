@@ -1,0 +1,21 @@
+{
+  "name": "qrorder-loadtest",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Thực nghiệm E1-E6 cho hệ thống QR Order (dùng lại thư viện mạng của client)",
+  "scripts": {
+    "e2e": "node e2e-test.js",
+    "e1": "node experiment.js e1",
+    "e2": "node experiment.js e2",
+    "e3": "node experiment.js e3",
+    "e4": "node experiment.js e4",
+    "e5": "node experiment.js e5",
+    "e6": "node experiment.js e6",
+    "all": "node run-all.js",
+    "report": "node report.js"
+  },
+  "dependencies": {
+    "ws": "8.18.0"
+  }
+}
