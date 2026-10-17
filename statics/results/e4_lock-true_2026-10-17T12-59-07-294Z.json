@@ -1,0 +1,12 @@
+{
+  "experiment": "E4",
+  "optimisticLockEnabled": true,
+  "rounds": 20,
+  "concurrentClients": 10,
+  "successfulUpdates": 20,
+  "expectedSuccessfulUpdates": 20,
+  "lostUpdates": 0,
+  "conflicts409": 180,
+  "otherErrors": 0,
+  "roundsWithLostUpdate": 0
+}

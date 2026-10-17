@@ -1,0 +1,35 @@
+{
+  "experiment": "E6",
+  "rateLimitEnabled": false,
+  "durationSec": 15,
+  "normalUsers": 30,
+  "spamConcurrency": 50,
+  "normalRequestLatencyMs": {
+    "count": 450,
+    "min": 6.07,
+    "mean": 19.72,
+    "p50": 17.74,
+    "p95": 47.51,
+    "p99": 48.07,
+    "max": 60.72
+  },
+  "normalRequestErrors": 0,
+  "normalOrdersOk": 30,
+  "normalOrdersFailed": 0,
+  "spammer": {
+    "sent": 45708,
+    "accepted": 45708,
+    "rateLimited": 0,
+    "other": 0,
+    "requestsPerSec": 3047.2
+  },
+  "serverCpuPercent": {
+    "count": 15,
+    "min": 10.19,
+    "mean": 14,
+    "p50": 14.47,
+    "p95": 16.47,
+    "p99": 16.47,
+    "max": 16.47
+  }
+}

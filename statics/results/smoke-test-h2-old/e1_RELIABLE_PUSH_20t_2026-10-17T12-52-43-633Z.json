@@ -1,0 +1,45 @@
+{
+  "experiment": "E1",
+  "mode": "RELIABLE_PUSH",
+  "tables": 20,
+  "durationSec": 20,
+  "orderIntervalMs": 5000,
+  "ordersCreated": 80,
+  "deliveredToKitchen": 80,
+  "notDelivered": 0,
+  "httpErrors": 0,
+  "orderToKitchenLatencyMs": {
+    "count": 80,
+    "min": 2.77,
+    "mean": 6.11,
+    "p50": 5.84,
+    "p95": 9.27,
+    "p99": 11.13,
+    "max": 11.13
+  },
+  "placeOrderHttpLatencyMs": {
+    "count": 80,
+    "min": 2.62,
+    "mean": 5.66,
+    "p50": 5.53,
+    "p95": 8.85,
+    "p99": 10.39,
+    "max": 10.39
+  },
+  "kitchen": {
+    "pollRequests": 0,
+    "pollRequestsPerSec": 0,
+    "pollPayloadBytes": 0,
+    "wsBytesIn": 62985,
+    "wsFramesIn": 82
+  },
+  "serverCpuPercent": {
+    "count": 26,
+    "min": 0.13,
+    "mean": 0.77,
+    "p50": 0.77,
+    "p95": 1.8,
+    "p99": 1.93,
+    "max": 1.93
+  }
+}

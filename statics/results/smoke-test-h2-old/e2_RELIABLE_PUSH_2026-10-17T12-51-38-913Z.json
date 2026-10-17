@@ -1,0 +1,29 @@
+{
+  "experiment": "E2",
+  "mode": "RELIABLE_PUSH",
+  "orders": 150,
+  "ratePerSec": 10,
+  "outageMs": 2000,
+  "dropEveryMs": 5000,
+  "outages": 2,
+  "ordersCreated": 150,
+  "receivedByKitchen": 150,
+  "lostOrders": 0,
+  "lossRatePercent": 0,
+  "duplicateDeliveriesToApp": 0,
+  "duplicatesFilteredBySeq": 0,
+  "gapsDetected": 0,
+  "resumeRequests": 3,
+  "replayedEvents": 41,
+  "reconnects": 2,
+  "resyncTimeMs": {
+    "count": 3,
+    "min": 6,
+    "mean": 10.67,
+    "p50": 13,
+    "p95": 13,
+    "p99": 13,
+    "max": 13
+  },
+  "httpErrors": 0
+}

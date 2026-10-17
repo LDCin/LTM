@@ -1,0 +1,79 @@
+{
+  "experiment": "E5",
+  "stepSec": 10,
+  "openWebSockets": 0,
+  "results": [
+    {
+      "concurrentClients": 10,
+      "requests": 25361,
+      "throughputPerSec": 2536.1,
+      "errorRatePercent": 0,
+      "latencyMs": {
+        "count": 25361,
+        "min": 0.97,
+        "mean": 3.92,
+        "p50": 3.44,
+        "p95": 7.22,
+        "p99": 9.65,
+        "max": 23.15
+      },
+      "serverCpuPercent": {
+        "count": 9,
+        "min": 2.34,
+        "mean": 28.77,
+        "p50": 34.31,
+        "p95": 42.99,
+        "p99": 42.99,
+        "max": 42.99
+      }
+    },
+    {
+      "concurrentClients": 50,
+      "requests": 32086,
+      "throughputPerSec": 3208.6,
+      "errorRatePercent": 0,
+      "latencyMs": {
+        "count": 32086,
+        "min": 4.72,
+        "mean": 15.56,
+        "p50": 14.93,
+        "p95": 20.87,
+        "p99": 33.55,
+        "max": 64.68
+      },
+      "serverCpuPercent": {
+        "count": 9,
+        "min": 7.22,
+        "mean": 13.89,
+        "p50": 14.41,
+        "p95": 16.85,
+        "p99": 16.85,
+        "max": 16.85
+      }
+    },
+    {
+      "concurrentClients": 100,
+      "requests": 31970,
+      "throughputPerSec": 3197,
+      "errorRatePercent": 0,
+      "latencyMs": {
+        "count": 31970,
+        "min": 6.13,
+        "mean": 31.25,
+        "p50": 29.96,
+        "p95": 39.82,
+        "p99": 54.72,
+        "max": 110.58
+      },
+      "serverCpuPercent": {
+        "count": 9,
+        "min": 7.7,
+        "mean": 14.49,
+        "p50": 14.58,
+        "p95": 17.23,
+        "p99": 17.23,
+        "max": 17.23
+      }
+    }
+  ]
+}

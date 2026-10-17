@@ -1,0 +1,17 @@
+# Tuỳ chọn: chạy MySQL bằng Docker thay vì cài trực tiếp.
+#   docker compose up -d
+services:
+  mysql:
+    image: mysql:8.0.39
+    container_name: qrorder-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: qrorder
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    ports:
+      - "3306:3306"
+    volumes:
+      - qrorder-data:/var/lib/mysql
+
+volumes:
+  qrorder-data:

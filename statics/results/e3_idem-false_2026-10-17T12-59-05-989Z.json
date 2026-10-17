@@ -1,0 +1,12 @@
+{
+  "experiment": "E3",
+  "idempotencyEnabled": false,
+  "logicalOrders": 100,
+  "httpRequestsSent": 134,
+  "simulatedLostResponses": 24,
+  "doubleTaps": 10,
+  "replayedResponses": 0,
+  "ordersInDatabase": 134,
+  "duplicateOrders": 34,
+  "duplicateRatePercent": 34
+}
