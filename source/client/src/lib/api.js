@@ -19,7 +19,10 @@ export async function request(method, path, { body, headers = {}, token, tableTo
   const allHeaders = { ...headers };
   if (body !== undefined) allHeaders['Content-Type'] = 'application/json';
   if (token) allHeaders.Authorization = `Bearer ${token}`;
-  if (tableToken) allHeaders['X-Table-Token'] = tableToken;
+  if (tableToken) {
+    allHeaders['X-Table-Token'] = tableToken;
+    allHeaders['X-Device-Id'] = getDeviceId(); // request của khách luôn kèm mã thiết bị
+  }
   try {
     const res = await fetch(path, {
       method,
@@ -82,6 +85,30 @@ export function newIdempotencyKey() {
   const bytes = new Uint8Array(16);
   crypto.getRandomValues(bytes);
   return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+// ------------------------------------------------------------------ mã thiết bị của khách
+
+const DEVICE_KEY = 'qrorder.deviceId';
+let memoryDeviceId = null;
+
+/**
+ * Mã thiết bị: sinh ngẫu nhiên lần đầu và giữ trong localStorage của trình duyệt.
+ * Server dùng mã này để mỗi máy chỉ thấy đơn của chính mình, dù nhiều máy quét cùng một mã QR.
+ * Nếu localStorage bị chặn (chế độ riêng tư) thì dùng tạm mã trong bộ nhớ cho tới khi đóng trang.
+ */
+export function getDeviceId() {
+  try {
+    let id = localStorage.getItem(DEVICE_KEY);
+    if (!id || !/^[A-Za-z0-9_-]{16,64}$/.test(id)) {
+      id = newIdempotencyKey();
+      localStorage.setItem(DEVICE_KEY, id);
+    }
+    return id;
+  } catch {
+    memoryDeviceId = memoryDeviceId || newIdempotencyKey();
+    return memoryDeviceId;
+  }
 }
 
 export function wsUrl() {

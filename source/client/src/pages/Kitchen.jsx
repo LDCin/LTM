@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import ConnectionBadge from '../components/ConnectionBadge.jsx';
 import Login from '../components/Login.jsx';
+import TableSessionPanel from '../components/TableSessionPanel.jsx';
 import { ApiError, getStaffSession, request, setStaffSession, wsUrl } from '../lib/api.js';
 import { ITEM_STATUS, minutesSince } from '../lib/format.js';
 import { KitchenFeed } from '../lib/kitchenFeed.js';
@@ -90,6 +91,7 @@ function KitchenBoard({ session, onLogout }) {
   const [station, setStation] = useState('ALL');
   const [toast, setToast] = useState(null);
   const [configChanged, setConfigChanged] = useState(false);
+  const [showTables, setShowTables] = useState(false);
   const [now, setNow] = useState(Date.now());
   const feedRef = useRef(null);
   const token = session.token;
@@ -204,12 +206,17 @@ function KitchenBoard({ session, onLogout }) {
               Giả lập mất mạng 5s
             </button>
           )}
+          <button className="btn small" onClick={() => setShowTables(true)}>
+            🪑 Dọn bàn
+          </button>
           <span className="user">{session.username}</span>
           <button className="btn small" onClick={onLogout}>
             Đăng xuất
           </button>
         </div>
       </header>
+
+      {showTables && <TableSessionPanel token={token} onClose={() => setShowTables(false)} onMessage={setToast} />}
 
       {configChanged && (
         <div className="banner warn">

@@ -3,6 +3,7 @@ package com.ltm.qrorder.ws;
 import com.ltm.qrorder.auth.AuthService;
 import com.ltm.qrorder.auth.StaffPrincipal;
 import com.ltm.qrorder.common.ApiException;
+import com.ltm.qrorder.common.DeviceIds;
 import com.ltm.qrorder.common.Metrics;
 import com.ltm.qrorder.config.AppProperties;
 import com.ltm.qrorder.table.TableInfo;
@@ -63,7 +64,7 @@ public class StompAuthInterceptor implements ChannelInterceptor {
         StaffPrincipal staff = auth.verify(AuthService.bearer(accessor.getFirstNativeHeader("Authorization")));
         if (staff != null) {
             registry.registerStaff(sessionId, staff.username());
-            accessor.setUser(new WsPrincipal("staff-" + sessionId, sessionId, ClientRole.STAFF, null, staff.username()));
+            accessor.setUser(new WsPrincipal("staff-" + sessionId, sessionId, ClientRole.STAFF, null, staff.username(), null));
             return;
         }
 
@@ -75,12 +76,16 @@ public class StompAuthInterceptor implements ChannelInterceptor {
             } catch (ApiException e) {
                 throw reject("INVALID_TABLE_TOKEN: mã QR không hợp lệ");
             }
+            String deviceId = accessor.getFirstNativeHeader("deviceId");
+            if (!DeviceIds.isValid(deviceId)) {
+                throw reject("INVALID_DEVICE_ID: thiếu hoặc sai header deviceId");
+            }
             int max = props.getWs().getMaxConnectionsPerTable();
             if (!registry.tryRegisterCustomer(sessionId, table.id(), table.code(), max)) {
                 throw reject("TOO_MANY_CONNECTIONS: bàn " + table.code() + " đã có " + max + " kết nối");
             }
             accessor.setUser(new WsPrincipal("table-" + sessionId, sessionId, ClientRole.CUSTOMER,
-                    table.id(), table.code()));
+                    table.id(), table.code(), deviceId));
             return;
         }
         throw reject("UNAUTHORIZED: thiếu header Authorization hoặc tableToken");
@@ -95,7 +100,9 @@ public class StompAuthInterceptor implements ChannelInterceptor {
         boolean allowed = switch (p.role()) {
             case STAFF -> dest.equals("/topic/kitchen") || dest.startsWith("/topic/table.")
                     || dest.equals("/topic/menu") || dest.startsWith("/user/queue/");
+            // Khách: topic bàn (chỉ có thông báo điều khiển, không có dữ liệu đơn), topic riêng của thiết bị mình
             case CUSTOMER -> dest.equals("/topic/table." + p.tableId())
+                    || dest.equals("/topic/guest." + p.deviceId())
                     || dest.equals("/topic/menu") || dest.equals("/user/queue/errors");
         };
         if (!allowed) {

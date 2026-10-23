@@ -454,16 +454,17 @@ async function e6() {
 
   const normal = tbls.slice(0, normalUsers).map(async (t, idx) => {
     const ip = `10.0.1.${idx + 1}`; // mỗi khách một IP (giả lập bằng X-Forwarded-For)
+    const deviceId = randomKey(); // mỗi khách một điện thoại
     let lastOrder = Date.now() - Math.random() * 15000;
     while (Date.now() < endAt) {
-      const r = await http.call('GET', '/api/orders', { tableToken: t.qrToken, headers: { 'X-Forwarded-For': ip } });
+      const r = await http.call('GET', '/api/orders', { tableToken: t.qrToken, headers: { 'X-Forwarded-For': ip, 'X-Device-Id': deviceId } });
       normalLatency.push(r.ms);
       if (r.status !== 200) normalErrors++;
       if (Date.now() - lastOrder > 15000) {
         lastOrder = Date.now();
         const o = await http.call('POST', '/api/orders', {
           tableToken: t.qrToken,
-          headers: { 'X-Forwarded-For': ip, 'Idempotency-Key': randomKey() },
+          headers: { 'X-Forwarded-For': ip, 'X-Device-Id': deviceId, 'Idempotency-Key': randomKey() },
           body: randomOrder(items),
         });
         if (o.status === 201) normalOrdersOk++;

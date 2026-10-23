@@ -53,7 +53,9 @@ CREATE TABLE IF NOT EXISTS orders (
     total      BIGINT      NOT NULL,
     created_at BIGINT      NOT NULL,
     updated_at BIGINT      NOT NULL,
+    device_id  VARCHAR(64) NULL,           -- mã thiết bị (trình duyệt) đã đặt đơn: khách chỉ thấy đơn của máy mình
     INDEX idx_orders_session (session_id),
+    INDEX idx_orders_session_device (session_id, device_id),
     INDEX idx_orders_status (status),
     INDEX idx_orders_created (created_at),
     FOREIGN KEY (session_id) REFERENCES table_session (id),

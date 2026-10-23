@@ -3,7 +3,7 @@
 Có 3 mức test, nên làm theo thứ tự:
 
 1. **Test tay trên trình duyệt** (khoảng 15 phút): hiểu hệ thống chạy thế nào, dùng để tập demo.
-2. **Test tự động** (khoảng 1 phút): `mvn test` (14 ca) và `npm run e2e` (143 ca).
+2. **Test tự động** (khoảng 1 phút): `mvn test` (16 ca) và `npm run e2e` (167 ca).
 3. **Thực nghiệm đo hiệu năng** (khoảng 15 phút): lấy số liệu cho báo cáo.
 
 ---
@@ -72,7 +72,7 @@ Nên bật chế độ điện thoại cho tab Khách: F12 → biểu tượng �
 
 | # | Thao tác | Kết quả đúng |
 |---|---|---|
-| 1 | Khách thêm 2 món, mở giỏ, ghi chú "ít cay", bấm **Đặt món** | Hiện "Đã gửi đơn tới bếp!"; đơn xuất hiện ở "Đơn của bàn" với trạng thái "Chờ bếp nhận" |
+| 1 | Khách thêm 2 món, mở giỏ, ghi chú "ít cay", bấm **Đặt món** | Hiện "Đã gửi đơn tới bếp!"; đơn xuất hiện ở "Đơn của bạn" với trạng thái "Chờ bếp nhận" |
 | 2 | Nhìn tab Bếp | Đơn hiện ngay ở cột **Mới** (không cần tải lại), có ghi chú 📝 |
 | 3 | Bếp bấm **Nhận** → **Bắt đầu nấu** → **Xong** | Đơn chuyển cột Mới → Đang làm → Sẵn sàng. Tab Khách đổi trạng thái theo, có thông báo "🔔 ... đã sẵn sàng!" |
 | 4 | Bếp bấm **Đã phục vụ** | Đơn biến mất khỏi bảng bếp; khách thấy "Đã phục vụ" |
@@ -87,6 +87,8 @@ Nên bật chế độ điện thoại cho tab Khách: F12 → biểu tượng �
 | 13 | Khách đặt **Bò lúc lắc** cho tới khi hết 10 suất | Món tự chuyển "Hết món" trên mọi tab khách, không cần tải lại |
 | 14 | Admin → **Thực đơn**: bỏ tick "Còn bán" một món → **Lưu** | Tab Khách hiện "Hết món" ngay lập tức |
 | 15 | Admin → **Bàn & QR**: **Đóng bàn** đang mở ở tab Khách | Tab Khách báo "Bàn đã được đóng", nút + bị khoá |
+| 15a | **Riêng tư:** khách đặt món ở `http://localhost:8080/t/...`, rồi mở **cùng link** bằng `http://127.0.0.1:8080/t/...` (hoặc điện thoại khác / cửa sổ ẩn danh, coi như máy thứ hai) | Máy thứ hai thấy "Đơn của bạn (0)", không thấy đơn của máy thứ nhất, cũng không nhận thông báo về đơn đó |
+| 15b | Bếp bấm **🪑 Dọn bàn** → bấm **Dọn bàn** ở bàn vừa đặt | Nếu còn món chưa phục vụ thì hỏi xác nhận; sau khi dọn, máy khách tự về "Đơn của bạn (0)" và có thông báo "Bàn đã được dọn"; đơn chưa làm xong vẫn còn ở bảng bếp |
 | 16 | **Mở bàn** lại, rồi **Đổi mã QR** | Link cũ báo "Mã QR không hợp lệ"; link mới (QR mới) dùng được |
 | 17 | Mở http://localhost:8080/t/abc | Trang báo "Mã QR không hợp lệ" |
 | 18 | Đăng nhập Bếp sai mật khẩu; đăng nhập trang Admin bằng tài khoản `bep` | Báo "Sai tên đăng nhập..."; báo "không có quyền truy cập" |
@@ -111,7 +113,7 @@ cd source/server
 mvn test
 ```
 
-Kết quả đúng: `Tests run: 14, Failures: 0, Errors: 0`.
+Kết quả đúng: `Tests run: 16, Failures: 0, Errors: 0`.
 
 ### End-to-end (server phải đang chạy)
 
@@ -120,7 +122,7 @@ cd source/loadtest
 npm run e2e
 ```
 
-Kết quả đúng: `KẾT QUẢ: 143 đạt, 0 lỗi`. Mỗi dòng ✔ là một tính năng đã được kiểm chứng qua mạng thật;
+Kết quả đúng: `KẾT QUẢ: 167 đạt, 0 lỗi`. Mỗi dòng ✔ là một tính năng đã được kiểm chứng qua mạng thật;
 dòng ✘ cho biết tính năng nào hỏng kèm dữ liệu thực tế. Bộ test dùng các bàn riêng mã `LTE...` và tự khôi phục
 cấu hình khi chạy xong, nên chạy lại bao nhiêu lần cũng được.
 

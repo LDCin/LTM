@@ -29,8 +29,8 @@ public class OrderRepository {
                             long createdAt) {
     }
 
-    /** Một món kèm thông tin đơn/bàn chứa nó. */
-    public record ItemRow(OrderItemDto item, long tableId, String tableCode) {
+    /** Một món kèm thông tin đơn/bàn/thiết bị chứa nó. */
+    public record ItemRow(OrderItemDto item, long tableId, String tableCode, String deviceId) {
     }
 
     private final JdbcTemplate jdbc;
@@ -41,10 +41,11 @@ public class OrderRepository {
         this.named = named;
     }
 
-    public long insertOrder(long sessionId, long tableId, long total, long now) {
+    public long insertOrder(long sessionId, long tableId, long total, long now, String deviceId) {
         return Jdbc.insert(jdbc,
-                "INSERT INTO orders (session_id, table_id, status, total, created_at, updated_at) VALUES (?, ?, 'NEW', ?, ?, ?)",
-                "id", sessionId, tableId, total, now, now);
+                "INSERT INTO orders (session_id, table_id, status, total, created_at, updated_at, device_id) " +
+                        "VALUES (?, ?, 'NEW', ?, ?, ?, ?)",
+                "id", sessionId, tableId, total, now, now, deviceId);
     }
 
     public long insertItem(long orderId, MenuItemDto menuItem, int quantity, String note, long now) {
@@ -63,10 +64,32 @@ public class OrderRepository {
         return loadWithItems("WHERE o.id = ?", id).stream().findFirst();
     }
 
-    /** 100 đơn gần nhất của phiên bàn. */
-    public List<OrderDto> findBySession(long sessionId) {
-        return loadWithItems("WHERE o.session_id = ? ORDER BY o.created_at DESC, o.id DESC LIMIT " + MAX_SESSION_ORDERS,
-                sessionId);
+    /**
+     * 100 đơn gần nhất mà THIẾT BỊ này đặt trong phiên hiện tại của bàn.
+     * Máy khác quét cùng mã QR (kể cả khách đến sau) không thấy các đơn này.
+     */
+    public List<OrderDto> findBySessionAndDevice(long sessionId, String deviceId) {
+        return loadWithItems("WHERE o.session_id = ? AND o.device_id = ? ORDER BY o.created_at DESC, o.id DESC LIMIT "
+                + MAX_SESSION_ORDERS, sessionId, deviceId);
+    }
+
+    public Optional<String> findDeviceId(long orderId) {
+        List<String> rows = jdbc.query("SELECT device_id FROM orders WHERE id = ?",
+                (rs, n) -> rs.getString("device_id"), orderId);
+        return rows.isEmpty() ? Optional.empty() : Optional.ofNullable(rows.get(0));
+    }
+
+    public long countOrdersInSession(long sessionId) {
+        Long n = jdbc.queryForObject("SELECT COUNT(*) FROM orders WHERE session_id = ?", Long.class, sessionId);
+        return n == null ? 0 : n;
+    }
+
+    /** Số món chưa phục vụ xong (không phải SERVED/CANCELLED) trong phiên bàn. */
+    public long countActiveItemsInSession(long sessionId) {
+        Long n = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM order_item i JOIN orders o ON o.id = i.order_id " +
+                        "WHERE o.session_id = ? AND i.status NOT IN ('SERVED', 'CANCELLED')", Long.class, sessionId);
+        return n == null ? 0 : n;
     }
 
     /** Các đơn đang làm, cũ nhất trước (bếp ưu tiên đơn chờ lâu), tối đa 500 đơn. */
@@ -108,9 +131,10 @@ public class OrderRepository {
 
     public Optional<ItemRow> findItem(long itemId) {
         List<ItemRow> rows = jdbc.query(
-                "SELECT " + ITEM_COLUMNS + ", o.table_id, t.code AS table_code FROM order_item i " +
+                "SELECT " + ITEM_COLUMNS + ", o.table_id, o.device_id, t.code AS table_code FROM order_item i " +
                         "JOIN orders o ON o.id = i.order_id JOIN restaurant_table t ON t.id = o.table_id WHERE i.id = ?",
-                (rs, n) -> new ItemRow(ITEM_MAPPER.mapRow(rs, n), rs.getLong("table_id"), rs.getString("table_code")),
+                (rs, n) -> new ItemRow(ITEM_MAPPER.mapRow(rs, n), rs.getLong("table_id"), rs.getString("table_code"),
+                        rs.getString("device_id")),
                 itemId);
         return rows.stream().findFirst();
     }
