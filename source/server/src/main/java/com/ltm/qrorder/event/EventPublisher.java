@@ -43,18 +43,28 @@ public class EventPublisher {
         return "/topic/table." + tableId;
     }
 
-    /** Sự kiện đơn hàng: tới bếp (trừ chế độ POLLING) và tới khách của bàn đó. */
-    public void publishOrderEvent(EventEnvelope envelope, long tableId) {
+    /** Topic riêng của một thiết bị khách: chỉ máy đặt đơn mới nhận được trạng thái đơn của mình. */
+    public static String guestTopic(String deviceId) {
+        return "/topic/guest." + deviceId;
+    }
+
+    /**
+     * Sự kiện đơn hàng: tới bếp (trừ chế độ POLLING) và tới đúng thiết bị đã đặt đơn.
+     * Không gửi dữ liệu đơn lên topic chung của bàn, để khách khác quét cùng QR không nhận được.
+     */
+    public void publishOrderEvent(EventEnvelope envelope, String deviceId) {
         afterCommit(() -> {
             if (props.getDeliveryMode() != DeliveryMode.POLLING) {
                 sendNow(KITCHEN_TOPIC, envelope);
             }
-            sendNow(tableTopic(tableId), envelope);
+            if (deviceId != null) {
+                sendNow(guestTopic(deviceId), envelope);
+            }
             metrics.eventsPublished.incrementAndGet();
         });
     }
 
-    /** Thông báo không cần seq (MENU_UPDATED, TABLE_CLOSED, CONFIG_CHANGED). */
+    /** Thông báo không cần seq (MENU_UPDATED, TABLE_CLOSED, TABLE_SESSION_RESET, CONFIG_CHANGED). */
     public void broadcast(String destination, Object payload) {
         afterCommit(() -> sendNow(destination, payload));
     }

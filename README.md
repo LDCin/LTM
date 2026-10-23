@@ -344,6 +344,8 @@ project/
 
 # 10. Installation
 
+> Hướng dẫn chi tiết từ máy trống (cài JDK, Maven, Node.js, MySQL, IDE...): [`SETUP.md`](SETUP.md).
+
 ## 10.1. Clone / Download
 
 ```bash

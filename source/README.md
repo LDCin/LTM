@@ -106,20 +106,33 @@ cd source/server
 mvn test
 ```
 
-14 test, gồm: token bucket; state machine; và test tích hợp qua HTTP thật (đặt trùng cùng key, **8 request song song
+16 test, gồm: token bucket; state machine; và test tích hợp qua HTTP thật (đặt trùng cùng key, **8 request song song
 cùng key chỉ tạo 1 đơn**, cùng key khác nội dung → 409, request sai → 400, mã QR sai → 401, sai version → 409,
-chuyển trạng thái sai → 409, bếp chưa đăng nhập → 401, ETag → 304).
+chuyển trạng thái sai → 409, bếp chưa đăng nhập → 401, ETag → 304, máy khác cùng bàn không thấy đơn,
+dọn bàn → lượt khách mới không thấy đơn cũ).
 
-Kiểm thử end-to-end trên server đang chạy (143 ca, khoảng 30 giây): REST, phân quyền, xử lý lỗi, idempotency,
+Kiểm thử end-to-end trên server đang chạy (167 ca, khoảng 40 giây): REST, phân quyền, xử lý lỗi, idempotency,
 WebSocket (sự kiện, ACK, RESUME, phân quyền SUBSCRIBE/SEND, giới hạn 8 kết nối/bàn, frame hỏng/quá cỡ,
 time-to-first-message), state machine, optimistic lock, huỷ đơn, tồn kho, quản lý bàn/thực đơn, các chế độ baseline,
-rate limit và giao đơn tin cậy khi bếp mất mạng. Test dùng bàn riêng `LTE...` và tự khôi phục cấu hình khi xong.
+rate limit, giao đơn tin cậy khi bếp mất mạng, đơn riêng theo thiết bị và dọn bàn. Test dùng bàn riêng `LTE...`,
+tự khôi phục cấu hình khi xong, và có dọn lượt khách của bàn **B12** để kiểm tra số liệu (đừng chạy trên DB đang demo).
+Server chạy cổng khác: `node e2e-test.js --base=http://localhost:8081`.
 
 ```bash
 cd source/loadtest
 npm install
 npm run e2e
 ```
+
+### Riêng tư giữa các lượt khách
+
+- Mỗi trình duyệt tự sinh một **mã thiết bị** ngẫu nhiên (localStorage) và gửi kèm mọi request (`X-Device-Id`)
+  và kết nối WebSocket (`deviceId`). Khách chỉ thấy, chỉ huỷ được và chỉ nhận sự kiện realtime của đơn do
+  chính máy mình đặt, trong lượt khách hiện tại của bàn. Máy khác quét cùng QR, kể cả khách đến sau, không thấy.
+- Nhân viên bấm **"🪑 Dọn bàn"** trên màn hình bếp (hoặc "Dọn bàn" ở trang Quản trị) khi khách rời đi:
+  lượt cũ kết thúc, lượt mới bắt đầu, mã QR in trên bàn giữ nguyên. Đơn chưa làm xong của lượt cũ vẫn ở màn hình bếp.
+- Database cũ (trước khi có tính năng này) được tự nâng cấp khi server khởi động (`SchemaMigrator` thêm cột
+  `orders.device_id`).
 
 Kiểm thử thủ công tính năng chịu lỗi: trên màn hình bếp bấm **"Giả lập mất mạng 5s"** trong lúc đặt món từ điện thoại.
 Sau khi kết nối lại, bếp tự gửi RESUME và nhận bù các đơn bị lỡ (thanh thống kê hiện số "Gửi bù").
@@ -178,22 +191,25 @@ REST (JSON, lỗi dạng `{"error","message","details","timestamp"}`):
 | GET | `/api/public/config` | Chế độ giao đơn, heart-beat |
 | GET | `/api/public/tables/{qrToken}` | Mã QR → bàn |
 | GET | `/api/public/menu` | Có `ETag`, gửi `If-None-Match` → `304` |
-| POST | `/api/orders` | Header `X-Table-Token`, `Idempotency-Key`; `201` mới / `200` + `Idempotent-Replayed: true` |
-| GET | `/api/orders` | Đơn của bàn |
-| POST | `/api/orders/{id}/cancel` | Chỉ khi mọi món còn PENDING |
+| POST | `/api/orders` | Header `X-Table-Token`, `X-Device-Id`, `Idempotency-Key`; `201` mới / `200` + `Idempotent-Replayed: true` |
+| GET | `/api/orders` | Đơn do **thiết bị này** đặt trong lượt khách hiện tại (bắt buộc `X-Device-Id`) |
+| POST | `/api/orders/{id}/cancel` | Chỉ đơn của thiết bị này, khi mọi món còn PENDING |
 | POST | `/api/auth/login` | → token nhân viên |
 | GET | `/api/kitchen/orders` | Ảnh chụp ban đầu + `latestSeq` |
 | GET | `/api/kitchen/events?afterSeq=` | Dùng cho POLLING |
 | PATCH | `/api/kitchen/order-items/{id}/status` | `{status, version}` |
+| GET | `/api/kitchen/tables` | Bàn + lượt khách hiện tại (số đơn, số món chưa phục vụ); không lộ qrToken |
+| POST | `/api/kitchen/tables/{id}/reset-session[?force=true]` | **Dọn bàn**: kết thúc lượt khách cũ, mở lượt mới; `409 TABLE_HAS_ACTIVE_ORDERS` nếu còn món chưa phục vụ |
 | * | `/api/admin/...` | Bàn, thực đơn, giám sát, cấu hình |
 
 WebSocket `ws://host/ws` (STOMP 1.2):
 
 | Hướng | Destination | Nội dung |
 |---|---|---|
-| Client → Server | `CONNECT` | `Authorization: Bearer <token>` (bếp) hoặc `tableToken: <qrToken>` (khách) |
+| Client → Server | `CONNECT` | `Authorization: Bearer <token>` (bếp) hoặc `tableToken: <qrToken>` + `deviceId: <mã thiết bị>` (khách) |
 | Server → Bếp | `/topic/kitchen` | `{type, seq, eventId, serverTime, payload}`: ORDER_CREATED, ITEM_STATUS_CHANGED, ORDER_CANCELLED |
-| Server → Khách | `/topic/table.{id}` | Như trên, chỉ của bàn đó; TABLE_CLOSED |
+| Server → Khách | `/topic/guest.{deviceId}` | Như trên nhưng chỉ đơn của **chính thiết bị đó** (thiết bị khác subscribe → ERROR FORBIDDEN) |
+| Server → Khách | `/topic/table.{id}` | Chỉ thông báo của bàn, không có dữ liệu đơn: TABLE_CLOSED, TABLE_SESSION_RESET |
 | Server → Tất cả | `/topic/menu` | MENU_UPDATED |
 | Bếp → Server | `/app/ack` | `{seq}` |
 | Bếp → Server | `/app/resume` | `{lastSeq}` → server trả `/user/queue/replay`: `{type:"REPLAY_BATCH", latestSeq, hasMore, events[]}` |

@@ -140,6 +140,77 @@ class OrderFlowIntegrationTest {
         assertEquals(304, second.getStatusCode().value());
     }
 
+    @Test
+    void ordersAreVisibleOnlyToTheDeviceThatPlacedThem() {
+        String token = jdbc.queryForObject("SELECT qr_token FROM restaurant_table WHERE code = 'B02'", String.class);
+        String deviceA = "deviceA-" + UUID.randomUUID().toString().replace("-", "");
+        String deviceB = "deviceB-" + UUID.randomUUID().toString().replace("-", "");
+        HttpHeaders a = customerHeaders(token, deviceA);
+        a.set("Idempotency-Key", UUID.randomUUID().toString());
+        long orderId = http.postForEntity("/api/orders",
+                json("{\"items\":[{\"menuItemId\":" + phoId + ",\"quantity\":1}]}", a), JsonNode.class)
+                .getBody().get("id").asLong();
+
+        JsonNode seenByA = myOrders(token, deviceA);
+        JsonNode seenByB = myOrders(token, deviceB);
+        assertEquals(true, containsOrder(seenByA, orderId), "máy đặt đơn phải thấy đơn của mình");
+        assertEquals(false, containsOrder(seenByB, orderId), "máy khác quét cùng QR không được thấy đơn");
+
+        ResponseEntity<JsonNode> cancelByB = http.postForEntity("/api/orders/" + orderId + "/cancel",
+                new HttpEntity<>(customerHeaders(token, deviceB)), JsonNode.class);
+        assertEquals(404, cancelByB.getStatusCode().value());
+
+        ResponseEntity<JsonNode> noDevice = http.exchange("/api/orders", HttpMethod.GET,
+                new HttpEntity<>(customerHeaders(token, null)), JsonNode.class);
+        assertEquals(400, noDevice.getStatusCode().value());
+    }
+
+    @Test
+    void resetSessionHidesPreviousCustomersOrders() {
+        String token = jdbc.queryForObject("SELECT qr_token FROM restaurant_table WHERE code = 'B03'", String.class);
+        long tableId = jdbc.queryForObject("SELECT id FROM restaurant_table WHERE code = 'B03'", Long.class);
+        String device = "device-" + UUID.randomUUID().toString().replace("-", "");
+        HttpHeaders h = customerHeaders(token, device);
+        h.set("Idempotency-Key", UUID.randomUUID().toString());
+        http.postForEntity("/api/orders", json("{\"items\":[{\"menuItemId\":" + phoId + ",\"quantity\":1}]}", h), JsonNode.class);
+        assertEquals(1, myOrders(token, device).get("orders").size());
+
+        HttpHeaders kitchen = new HttpHeaders();
+        kitchen.setBearerAuth(kitchenToken);
+        ResponseEntity<JsonNode> refused = http.postForEntity("/api/kitchen/tables/" + tableId + "/reset-session",
+                new HttpEntity<>(kitchen), JsonNode.class);
+        assertEquals(409, refused.getStatusCode().value());
+        assertEquals("TABLE_HAS_ACTIVE_ORDERS", refused.getBody().get("error").asText());
+
+        ResponseEntity<JsonNode> forced = http.postForEntity("/api/kitchen/tables/" + tableId + "/reset-session?force=true",
+                new HttpEntity<>(kitchen), JsonNode.class);
+        assertEquals(200, forced.getStatusCode().value());
+        assertEquals(0, myOrders(token, device).get("orders").size(), "lượt khách mới không thấy đơn cũ");
+    }
+
+    private HttpHeaders customerHeaders(String token, String deviceId) {
+        HttpHeaders h = new HttpHeaders();
+        h.set("X-Table-Token", token);
+        if (deviceId != null) {
+            h.set("X-Device-Id", deviceId);
+        }
+        return h;
+    }
+
+    private JsonNode myOrders(String token, String deviceId) {
+        return http.exchange("/api/orders", HttpMethod.GET, new HttpEntity<>(customerHeaders(token, deviceId)), JsonNode.class)
+                .getBody();
+    }
+
+    private static boolean containsOrder(JsonNode view, long orderId) {
+        for (JsonNode o : view.get("orders")) {
+            if (o.get("id").asLong() == orderId) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private ResponseEntity<JsonNode> placeOrder(String key, long menuItemId, int quantity) {
         HttpHeaders h = new HttpHeaders();
         h.set("X-Table-Token", tableToken);

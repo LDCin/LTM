@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import Login from '../components/Login.jsx';
+import { resetTableSession } from '../components/TableSessionPanel.jsx';
 import { ApiError, getStaffSession, request, setStaffSession } from '../lib/api.js';
 import { formatVnd } from '../lib/format.js';
 
@@ -51,7 +52,7 @@ export default function Admin() {
         </button>
       </header>
       <main className="admin-body">
-        {tab === 'tables' && <TablesTab api={api} />}
+        {tab === 'tables' && <TablesTab api={api} token={session.token} />}
         {tab === 'menu' && <MenuTab api={api} />}
         {tab === 'monitor' && <MonitorTab api={api} />}
         {tab === 'settings' && <SettingsTab api={api} />}
@@ -80,7 +81,7 @@ function useAsync(loader, deps) {
 
 // ------------------------------------------------------------------ bàn & QR
 
-function TablesTab({ api }) {
+function TablesTab({ api, token }) {
   const { data: tables, error, reload } = useAsync(() => api('GET', '/api/admin/tables'), []);
   const [baseUrl, setBaseUrl] = useState(window.location.origin);
   const [code, setCode] = useState('');
@@ -146,9 +147,14 @@ function TablesTab({ api }) {
                 </a>
                 <div className="table-card-actions no-print">
                   {t.status === 'OPEN' ? (
-                    <button className="btn small" onClick={() => act(() => api('POST', `/api/admin/tables/${t.id}/close`))}>
-                      Đóng bàn
-                    </button>
+                    <>
+                      <button className="btn small primary" onClick={() => act(() => resetTableSession(token, t.id))}>
+                        Dọn bàn
+                      </button>
+                      <button className="btn small" onClick={() => act(() => api('POST', `/api/admin/tables/${t.id}/close`))}>
+                        Đóng bàn
+                      </button>
+                    </>
                   ) : (
                     <button className="btn small primary" onClick={() => act(() => api('POST', `/api/admin/tables/${t.id}/open`))}>
                       Mở bàn

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import ConnectionBadge from '../components/ConnectionBadge.jsx';
-import { ApiError, isRetryable, newIdempotencyKey, request, withRetry, wsUrl } from '../lib/api.js';
+import { ApiError, getDeviceId, isRetryable, newIdempotencyKey, request, withRetry, wsUrl } from '../lib/api.js';
 import { RealtimeConnection } from '../lib/connection.js';
 import { ITEM_STATUS, categoryIcon, formatVnd } from '../lib/format.js';
 
@@ -104,24 +104,33 @@ export default function Customer() {
     })();
   }, [token, loadMenu, loadOrders]);
 
-  // WebSocket: nhận trạng thái món của bàn mình theo thời gian thực
+  // WebSocket:
+  //  - /topic/guest.{deviceId}: trạng thái các đơn do CHÍNH máy này đặt (máy khác cùng bàn không nhận được)
+  //  - /topic/table.{tableId} : thông báo của bàn (đóng bàn, dọn bàn), không chứa dữ liệu đơn
   const tableId = table?.tableId;
   useEffect(() => {
     if (!tableId) return undefined;
+    const deviceId = getDeviceId();
     const connection = new RealtimeConnection({
       url: wsUrl(),
-      connectHeaders: { tableToken: token },
+      connectHeaders: { tableToken: token, deviceId },
       onStatus: (status, info) => setConn({ status, info }),
       onConnected: (client) => {
+        client.subscribe(`/topic/guest.${deviceId}`, (msg) => {
+          setOrders((prev) => applyEvent(prev, msg));
+          if (msg.type === 'ITEM_STATUS_CHANGED' && msg.payload.to === 'READY') {
+            notify(`🔔 ${msg.payload.name} đã sẵn sàng!`);
+          }
+        });
         client.subscribe(`/topic/table.${tableId}`, (msg) => {
           if (msg.type === 'TABLE_CLOSED') {
             setTable((t) => (t ? { ...t, open: false } : t));
             notify('Bàn đã được đóng. Vui lòng gọi nhân viên nếu cần gọi thêm.');
-            return;
-          }
-          setOrders((prev) => applyEvent(prev, msg));
-          if (msg.type === 'ITEM_STATUS_CHANGED' && msg.payload.to === 'READY') {
-            notify(`🔔 ${msg.payload.name} đã sẵn sàng!`);
+          } else if (msg.type === 'TABLE_SESSION_RESET') {
+            // Nhân viên đã dọn bàn: phiên cũ kết thúc, danh sách đơn của phiên mới bắt đầu trống
+            setOrders([]);
+            loadOrders().catch(() => {});
+            notify('Bàn đã được dọn, bắt đầu lượt khách mới.');
           }
         });
         client.subscribe('/topic/menu', () => loadMenu().catch(() => {}));
@@ -297,8 +306,8 @@ export default function Customer() {
       </section>
 
       <section className="my-orders">
-        <h2>Đơn của bàn ({orders.length})</h2>
-        {visibleOrders.length === 0 && <p className="hint">Chưa có đơn nào.</p>}
+        <h2>Đơn của bạn ({orders.length})</h2>
+        {visibleOrders.length === 0 && <p className="hint">Bạn chưa đặt đơn nào trong lượt này.</p>}
         {visibleOrders.map((o) => (
           <div key={o.id} className="order-card">
             <div className="order-head">

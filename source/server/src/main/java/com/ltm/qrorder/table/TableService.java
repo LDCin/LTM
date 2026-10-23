@@ -111,14 +111,39 @@ public class TableService {
 
     @Transactional
     public TableInfo close(long id) {
-        TableInfo t = get(id);
+        if (endSession(get(id))) {
+            publisher.broadcast(EventPublisher.tableTopic(id), Map.of("type", "TABLE_CLOSED", "tableId", id));
+        }
+        return get(id);
+    }
+
+    /**
+     * "Dọn bàn": kết thúc phiên của khách cũ và mở ngay phiên mới cho khách sau, trong MỘT transaction.
+     * Đơn của phiên cũ không còn hiện với bất kỳ máy nào quét QR của bàn này.
+     */
+    @Transactional
+    public TableInfo startNewSession(long id) {
+        endSession(get(id));
+        TableInfo opened = open(id);
+        publisher.broadcast(EventPublisher.tableTopic(id),
+                Map.of("type", "TABLE_SESSION_RESET", "tableId", id, "sessionId", opened.sessionId()));
+        return opened;
+    }
+
+    public Long sessionOpenedAt(long sessionId) {
+        List<Long> rows = jdbc.query("SELECT opened_at FROM table_session WHERE id = ?",
+                (rs, i) -> rs.getLong("opened_at"), sessionId);
+        return rows.isEmpty() ? null : rows.get(0);
+    }
+
+    /** @return true nếu bàn đang mở và phiên vừa được đóng. */
+    private boolean endSession(TableInfo t) {
         if (!t.isOpen()) {
-            return t;
+            return false;
         }
         jdbc.update("UPDATE table_session SET closed_at = ? WHERE id = ?", System.currentTimeMillis(), t.sessionId());
-        jdbc.update("UPDATE restaurant_table SET status = 'CLOSED', current_session_id = NULL WHERE id = ?", id);
-        publisher.broadcast(EventPublisher.tableTopic(id), Map.of("type", "TABLE_CLOSED", "tableId", id));
-        return get(id);
+        jdbc.update("UPDATE restaurant_table SET status = 'CLOSED', current_session_id = NULL WHERE id = ?", t.id());
+        return true;
     }
 
     /** Đóng rồi mở lại (phiên mới) mọi bàn có mã bắt đầu bằng prefix. Dùng để dọn dữ liệu thực nghiệm. */

@@ -55,4 +55,9 @@ public final class OrderDtos {
 
     public record EventPage(long latestSeq, List<EventEnvelope> events) {
     }
+
+    /** Bàn nhìn từ phía bếp/nhân viên (không lộ qrToken). */
+    public record KitchenTableView(long id, String code, String status, Long sessionId, Long sessionOpenedAt,
+                                   long orderCount, long activeItemCount) {
+    }
 }

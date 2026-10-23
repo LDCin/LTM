@@ -2,6 +2,7 @@ package com.ltm.qrorder.order;
 
 import com.ltm.qrorder.auth.StaffPrincipal;
 import com.ltm.qrorder.common.ApiException;
+import com.ltm.qrorder.common.DeviceIds;
 import com.ltm.qrorder.common.ErrorCode;
 import com.ltm.qrorder.common.Metrics;
 import com.ltm.qrorder.config.AppProperties;
@@ -13,6 +14,7 @@ import com.ltm.qrorder.menu.MenuService;
 import com.ltm.qrorder.order.IdempotencyRepository.IdempotencyRecord;
 import com.ltm.qrorder.order.OrderDtos.EventPage;
 import com.ltm.qrorder.order.OrderDtos.KitchenSnapshot;
+import com.ltm.qrorder.order.OrderDtos.KitchenTableView;
 import com.ltm.qrorder.order.OrderDtos.OrderDto;
 import com.ltm.qrorder.order.OrderDtos.OrderItemDto;
 import com.ltm.qrorder.order.OrderDtos.OrderLine;
@@ -85,13 +87,15 @@ public class OrderService {
      *    INSERT key, ràng buộc PRIMARY KEY chỉ cho một bên thắng; bên thua nhận DuplicateKeyException
      *    rồi đọc lại đơn mà bên thắng đã tạo.
      */
-    public PlaceOrderResult placeOrder(String tableToken, String idempotencyKey, PlaceOrderRequest req) {
+    public PlaceOrderResult placeOrder(String tableToken, String deviceId, String idempotencyKey, PlaceOrderRequest req) {
         if (idempotencyKey != null && !KEY_PATTERN.matcher(idempotencyKey).matches()) {
             throw new ApiException(ErrorCode.INVALID_REQUEST, "Idempotency-Key phải gồm 8-64 ký tự [A-Za-z0-9_-]");
         }
+        DeviceIds.optional(deviceId);
         TableInfo table = tables.requireOpen(tableToken);
         boolean useKey = props.isIdempotencyEnabled() && idempotencyKey != null;
-        String hash = useKey ? requestHash(table.id(), req) : null;
+        // Hash gồm cả mã thiết bị: máy khác dùng lại key (dù cùng nội dung) cũng không lấy được đơn của máy này
+        String hash = useKey ? requestHash(table.id(), deviceId, req) : null;
 
         if (useKey) {
             Optional<OrderDto> replay = findReplay(idempotencyKey, hash);
@@ -100,7 +104,7 @@ public class OrderService {
             }
         }
         try {
-            OrderDto order = tx.execute(status -> createOrder(table, req, useKey ? idempotencyKey : null, hash));
+            OrderDto order = tx.execute(status -> createOrder(table, deviceId, req, useKey ? idempotencyKey : null, hash));
             metrics.ordersCreated.incrementAndGet();
             return new PlaceOrderResult(order, false);
         } catch (DuplicateKeyException e) {
@@ -133,7 +137,7 @@ public class OrderService {
     }
 
     /** Chạy BÊN TRONG transaction. Ném exception bất kỳ -> rollback toàn bộ, không phát sự kiện. */
-    private OrderDto createOrder(TableInfo table, PlaceOrderRequest req, String key, String hash) {
+    private OrderDto createOrder(TableInfo table, String deviceId, PlaceOrderRequest req, String key, String hash) {
         long now = System.currentTimeMillis();
         if (key != null) {
             idempotency.insert(key, hash, now);   // chiếm key trước tiên
@@ -170,7 +174,7 @@ public class OrderService {
             stockChanged = true;
         }
 
-        long orderId = orders.insertOrder(table.sessionId(), table.id(), total, now);
+        long orderId = orders.insertOrder(table.sessionId(), table.id(), total, now, deviceId);
         for (OrderLine line : req.items()) {
             orders.insertItem(orderId, menuItems.get(line.menuItemId()), line.quantity(), normalizeNote(line.note()), now);
         }
@@ -180,7 +184,7 @@ public class OrderService {
 
         OrderDto order = orders.findOrder(orderId).orElseThrow();
         EventEnvelope envelope = events.append(orderId, table.id(), "ORDER_CREATED", order);
-        publisher.publishOrderEvent(envelope, table.id());   // chỉ thực sự gửi sau khi commit
+        publisher.publishOrderEvent(envelope, deviceId);   // chỉ thực sự gửi sau khi commit
         if (stockChanged) {
             menu.markChanged();
         }
@@ -239,7 +243,7 @@ public class OrderService {
         payload.put("updatedAt", now);
         payload.put("by", staff.username());
         EventEnvelope envelope = events.append(current.orderId(), row.tableId(), "ITEM_STATUS_CHANGED", payload);
-        publisher.publishOrderEvent(envelope, row.tableId());
+        publisher.publishOrderEvent(envelope, row.deviceId());
         return item;
     }
 
@@ -251,11 +255,14 @@ public class OrderService {
 
     // ================================================================ KHÁCH HUỶ ĐƠN
 
-    public OrderDto cancelOrder(String tableToken, long orderId) {
+    public OrderDto cancelOrder(String tableToken, String deviceId, long orderId) {
+        DeviceIds.require(deviceId);
         TableInfo table = tables.requireOpen(tableToken);
         return tx.execute(status -> {
+            // Chỉ huỷ được đơn do chính máy này đặt, trong phiên hiện tại của bàn
             OrderDto order = orders.findOrder(orderId)
                     .filter(o -> o.tableId() == table.id() && o.sessionId() == table.sessionId())
+                    .filter(o -> deviceId.equals(orders.findDeviceId(o.id()).orElse(null)))
                     .orElseThrow(() -> new ApiException(ErrorCode.NOT_FOUND, "Không tìm thấy đơn #" + orderId));
             boolean allPending = order.items().stream().allMatch(i -> OrderItemStatus.PENDING.name().equals(i.status()));
             if (!allPending) {
@@ -274,7 +281,7 @@ public class OrderService {
             orders.updateOrderStatus(orderId, OrderStatus.CANCELLED.name(), now);
             EventEnvelope envelope = events.append(orderId, table.id(), "ORDER_CANCELLED",
                     Map.of("orderId", orderId, "tableId", table.id(), "tableCode", table.code()));
-            publisher.publishOrderEvent(envelope, table.id());
+            publisher.publishOrderEvent(envelope, deviceId);
             if (stockRestored) {
                 menu.markChanged();
             }
@@ -284,11 +291,43 @@ public class OrderService {
 
     // ================================================================ TRUY VẤN
 
-    public TableOrdersView ordersForTable(String tableToken) {
+    /** Đơn của THIẾT BỊ này trong phiên hiện tại của bàn (không phải mọi đơn của bàn). */
+    public TableOrdersView ordersForDevice(String tableToken, String deviceId) {
+        DeviceIds.require(deviceId);
         TableInfo t = tables.resolveToken(tableToken);
         TableView view = new TableView(t.id(), t.code(), t.status(), t.isOpen());
-        List<OrderDto> list = t.sessionId() == null ? List.of() : orders.findBySession(t.sessionId());
+        List<OrderDto> list = t.sessionId() == null ? List.of() : orders.findBySessionAndDevice(t.sessionId(), deviceId);
         return new TableOrdersView(view, list);
+    }
+
+    /** Danh sách bàn cho bếp/nhân viên kèm tình trạng phiên hiện tại. */
+    public List<KitchenTableView> kitchenTables() {
+        return tables.list().stream()
+                .filter(t -> !t.code().startsWith("LT"))   // ẩn bàn của load test
+                .map(t -> new KitchenTableView(t.id(), t.code(), t.status(), t.sessionId(),
+                        t.sessionId() == null ? null : tables.sessionOpenedAt(t.sessionId()),
+                        t.sessionId() == null ? 0 : orders.countOrdersInSession(t.sessionId()),
+                        t.sessionId() == null ? 0 : orders.countActiveItemsInSession(t.sessionId())))
+                .toList();
+    }
+
+    /**
+     * Dọn bàn khi khách đã rời đi: kết thúc phiên cũ, mở phiên mới.
+     * Nếu bàn còn món chưa phục vụ xong thì từ chối (409) trừ khi force = true, tránh bấm nhầm.
+     */
+    public KitchenTableView resetTableSession(long tableId, boolean force) {
+        TableInfo t = tables.get(tableId);
+        if (t.sessionId() != null && !force) {
+            long active = orders.countActiveItemsInSession(t.sessionId());
+            if (active > 0) {
+                throw new ApiException(ErrorCode.TABLE_HAS_ACTIVE_ORDERS,
+                        "Bàn " + t.code() + " còn " + active + " món chưa phục vụ xong",
+                        Map.of("activeItemCount", active, "tableCode", t.code()));
+            }
+        }
+        TableInfo opened = tables.startNewSession(tableId);
+        return new KitchenTableView(opened.id(), opened.code(), opened.status(), opened.sessionId(),
+                tables.sessionOpenedAt(opened.sessionId()), 0, 0);
     }
 
     public KitchenSnapshot kitchenSnapshot() {
@@ -312,8 +351,8 @@ public class OrderService {
     }
 
     /** SHA-256 của nội dung đơn: phát hiện cùng key nhưng nội dung khác. */
-    static String requestHash(long tableId, PlaceOrderRequest req) {
-        StringBuilder sb = new StringBuilder().append(tableId);
+    static String requestHash(long tableId, String deviceId, PlaceOrderRequest req) {
+        StringBuilder sb = new StringBuilder().append(tableId).append('|').append(deviceId == null ? "" : deviceId);
         for (OrderLine line : req.items()) {
             sb.append('|').append(line.menuItemId()).append(':').append(line.quantity())
                     .append(':').append(normalizeNote(line.note()) == null ? "" : normalizeNote(line.note()));
