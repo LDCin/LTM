@@ -573,9 +573,10 @@ Server giới hạn request theo địa chỉ IP (60 request dồn, hồi 20 req
 điện thoại có chung một IP** là `127.0.0.1`, và giới hạn theo IP bị áp chung cho tất cả.
 
 * Demo với vài điện thoại: thường không chạm giới hạn, không cần làm gì.
-* Nhiều người dùng cùng lúc và bị báo "thao tác quá nhanh" (429): vào Quản trị → **Cấu hình thực nghiệm** → bật
-  **"Tin header X-Forwarded-For"** để server đọc IP thật mà ngrok/Cloudflare gắn vào request. Thiết lập này mất khi
-  khởi động lại server. Đánh đổi: client có thể tự gửi header này để giả IP, nên chỉ bật khi cần.
+* Nhiều người dùng cùng lúc và bị báo "thao tác quá nhanh" (429): vào Quản trị → **Cấu hình thực nghiệm** → tạm tắt
+  **Rate limiting** trong lúc demo (thiết lập này mất khi khởi động lại server).
+* Server có hỗ trợ đọc IP thật từ header `X-Forwarded-For` mà ngrok/Cloudflare gắn vào, nhưng tuỳ chọn này không hiện
+  trên giao diện (client có thể tự gửi header này để giả IP); bộ đo thực nghiệm E6 tự bật nó khi chạy rồi tắt lại.
 
 ### 12.7. Thanh toán VNPay (sandbox) qua tunnel
 

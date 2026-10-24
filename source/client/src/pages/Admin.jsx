@@ -399,11 +399,7 @@ function SettingsTab({ api }) {
       <Toggle label="Idempotency-Key (chống đặt trùng)" value={data.idempotencyEnabled} onChange={(v) => update({ idempotencyEnabled: v })} />
       <Toggle label="Optimistic locking (chống ghi đè trạng thái)" value={data.optimisticLockEnabled} onChange={(v) => update({ optimisticLockEnabled: v })} />
       <Toggle label="Rate limiting (token bucket)" value={data.rateLimitEnabled} onChange={(v) => update({ rateLimitEnabled: v })} />
-      <Toggle
-        label="Tin header X-Forwarded-For (chỉ dùng khi thực nghiệm giả lập nhiều IP)"
-        value={data.trustForwardedFor}
-        onChange={(v) => update({ trustForwardedFor: v })}
-      />
+      {/* trustForwardedFor không hiện ở đây: bộ đo E6 tự bật/tắt qua PUT /api/admin/settings */}
       {msg && <p className="hint">{msg}</p>}
     </div>
   );
