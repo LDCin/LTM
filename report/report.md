@@ -16,7 +16,7 @@
 
 ## Tóm tắt (Abstract)
 
-Ở nhà hàng, khách gọi món qua điện thoại kết nối Wi-Fi, còn màn hình bếp (Kitchen Display System – KDS) thường là một máy tính bảng có thể rớt mạng bất kỳ lúc nào. Nếu chỉ đẩy đơn qua WebSocket kiểu "gửi rồi quên", những đơn phát ra đúng lúc bếp mất kết nối sẽ biến mất; nếu khách bấm "Đặt món" hai lần hoặc trình duyệt tự gửi lại do không nhận được phản hồi, đơn sẽ bị nhân đôi; nếu hai đầu bếp cùng bấm trên một món, cập nhật của người này đè lên người kia. Báo cáo trình bày **QR Order**, một hệ thống client–server gồm ứng dụng web cho khách, cho bếp, cho thu ngân và cho quản trị, máy chủ Spring Boot và cơ sở dữ liệu quan hệ. Khách quét QR là tự vào **phiên bàn** chung với các điện thoại khác cùng bàn, thấy đơn chung của bàn, và thanh toán cả bàn bằng tiền mặt (thu ngân xác nhận) hoặc qua cổng VNPay sandbox. Lệnh nghiệp vụ đi qua REST/HTTP, còn sự kiện được máy chủ đẩy qua WebSocket với giao thức con STOMP 1.2. Phần đóng góp nằm ở tầng giao thức ứng dụng: (1) mỗi sự kiện mang số thứ tự toàn cục `seq` lấy từ bảng nhật ký sự kiện; client bếp ACK, loại trùng, phát hiện khoảng trống và gửi `RESUME` để máy chủ phát bù từ nhật ký; (2) sự kiện chỉ được phát sau khi giao dịch cơ sở dữ liệu commit; (3) đặt món idempotent bằng header `Idempotency-Key` kèm băm nội dung; (4) máy trạng thái cho từng món kết hợp khoá lạc quan theo `version`; (5) nhiều lớp chống quá tải gồm token bucket, giới hạn kết nối WebSocket theo bàn, giới hạn bộ đệm gửi và kết nối lại có backoff + jitter. Baseline và giải pháp đề xuất chạy trên cùng mã nguồn, chuyển đổi lúc chạy qua API cấu hình. Trong lần thực nghiệm rút gọn trên H2: khi bếp mất mạng 3 giây, chế độ đẩy thông thường mất 31/200 đơn (15,5%) còn chế độ đề xuất mất 0/200; khi có mất phản hồi và bấm hai lần, tỷ lệ đơn trùng giảm từ 34% xuống 0%; với 10 client cùng sửa một món, số lost update giảm từ 134 xuống 0; độ trễ trung vị từ lúc đặt món đến lúc bếp nhận giảm từ 1341,68 ms (polling 3 s) xuống 7,71 ms. Số liệu với MySQL đang được bổ sung. Ngoài ra, kết quả thanh toán VNPay được xác nhận theo kiểu server-to-server (IPN) có chữ ký HMAC-SHA512 và xử lý idempotent; phần này mới được kiểm thử chức năng, chưa đo hiệu năng.
+Ở nhà hàng, khách gọi món qua điện thoại kết nối Wi-Fi, còn màn hình bếp (Kitchen Display System – KDS) thường là một máy tính bảng có thể rớt mạng bất kỳ lúc nào. Nếu chỉ đẩy đơn qua WebSocket kiểu "gửi rồi quên", những đơn phát ra đúng lúc bếp mất kết nối sẽ biến mất; nếu khách bấm "Đặt món" hai lần hoặc trình duyệt tự gửi lại do không nhận được phản hồi, đơn sẽ bị nhân đôi; nếu hai đầu bếp cùng bấm trên một món, cập nhật của người này đè lên người kia. Báo cáo trình bày **QR Order**, một hệ thống client–server gồm ứng dụng web cho khách, cho bếp, cho thu ngân và cho quản trị, máy chủ Spring Boot và cơ sở dữ liệu quan hệ. Khách quét QR là tự vào **phiên bàn** chung với các điện thoại khác cùng bàn, thấy đơn chung của bàn, và thanh toán cả bàn bằng tiền mặt (thu ngân xác nhận) hoặc qua cổng VNPay sandbox. Lệnh nghiệp vụ đi qua REST/HTTP, còn sự kiện được máy chủ đẩy qua WebSocket với giao thức con STOMP 1.2. Phần đóng góp nằm ở tầng giao thức ứng dụng: (1) mỗi sự kiện mang số thứ tự toàn cục `seq` lấy từ bảng nhật ký sự kiện; client bếp ACK, loại trùng, phát hiện khoảng trống và gửi `RESUME` để máy chủ phát bù từ nhật ký; (2) sự kiện chỉ được phát sau khi giao dịch cơ sở dữ liệu commit; (3) đặt món idempotent bằng header `Idempotency-Key` kèm băm nội dung; (4) máy trạng thái cho từng món kết hợp khoá lạc quan theo `version`; (5) nhiều lớp chống quá tải gồm token bucket, giới hạn kết nối WebSocket theo bàn, giới hạn bộ đệm gửi và kết nối lại có backoff + jitter. Baseline và giải pháp đề xuất chạy trên cùng mã nguồn, chuyển đổi lúc chạy qua API cấu hình. Trong lần thực nghiệm rút gọn trên H2: khi bếp mất mạng 3 giây, chế độ đẩy thông thường mất 31/200 đơn (15,5%) còn chế độ đề xuất mất 0/200; khi có mất phản hồi và bấm hai lần, tỷ lệ đơn trùng giảm từ 34% xuống 0%; với 10 client cùng sửa một món, số lost update giảm từ 134 xuống 0; độ trễ trung vị từ lúc đặt món đến lúc bếp nhận giảm từ 1341,68 ms (polling 3 s) xuống 7,71 ms. Số liệu với MySQL đang được bổ sung. Ngoài ra, kết quả thanh toán VNPay được xác nhận theo kiểu server-to-server (IPN) có chữ ký HMAC-SHA512 và xử lý idempotent; phần này mới được kiểm thử chức năng, chưa đo hiệu năng. Các nghiệp vụ bổ sung (khách gọi phục vụ, bếp huỷ hoặc ghi nhận khách trả lại món đã nhận) dùng lại đúng các cơ chế trên: ràng buộc `UNIQUE` để gộp yêu cầu trùng, khoá lạc quan để chống ghi đè, phát sau commit để không có thông báo "ma".
 
 ## Từ khóa (Keywords)
 
@@ -54,6 +54,8 @@ Thiết kế và hiện thực một hệ thống gọi món qua QR trong đó m
 7. Đo lường và so sánh định lượng giải pháp với baseline trên cùng mã nguồn.
 8. Phiên bàn tự mở khi khách đầu tiên quét QR; mọi điện thoại cùng bàn thấy đơn chung (ghi tên người đặt); thu ngân kết thúc phiên bằng "Trả bàn".
 9. Thanh toán theo bàn bằng tiền mặt hoặc VNPay sandbox: số tiền do máy chủ tính, mỗi phiên tối đa một lần thanh toán đang chờ, kết quả VNPay chỉ được ghi nhận khi có chữ ký hợp lệ và không bị ghi nhận hai lần.
+10. Khách bấm "Gọi phục vụ" là quầy lễ tân nhận thông báo ngay; nhiều điện thoại cùng bàn bấm hay bấm lặp vẫn chỉ tạo một thông báo.
+11. Bếp huỷ được món đã nhận (một phần hoặc cả dòng) hoặc ghi nhận khách trả lại món đã phục vụ, bắt buộc có lý do; món huỷ không tính tiền, và nếu bàn đã thanh toán thì quầy thu ngân thấy số tiền phải trả lại khách.
 
 ### 1.5. Phạm vi
 
@@ -63,7 +65,8 @@ Thiết kế và hiện thực một hệ thống gọi món qua QR trong đó m
 | Thực đơn, giỏ hàng, ghi chú món, giới hạn số lượng (stock) | Nhiều chi nhánh, nhiều nhà hàng |
 | Màn hình bếp thời gian thực, cập nhật trạng thái từng món | Giao hàng, đặt bàn trước |
 | Đăng nhập nhân viên (bếp, thu ngân, quản trị) | Ứng dụng di động native |
-| Đơn chung của bàn, tên khách; thanh toán theo bàn: tiền mặt và VNPay **sandbox** | |
+| Đơn chung của bàn, tên khách; thanh toán theo bàn: tiền mặt và VNPay **sandbox** | Giảm giá, phí phục vụ, VAT, in hóa đơn |
+| Gọi phục vụ (báo quầy lễ tân); bếp huỷ / ghi nhận khách trả lại món đã nhận | Nhân viên gọi món hộ, chuyển / gộp bàn, báo cáo doanh thu |
 | Giao đơn tin cậy, idempotency, đồng bộ nhiều bếp, chống quá tải | Triển khai cloud, nhiều máy chủ |
 | Bộ công cụ thực nghiệm E1–E6 | HTTPS/WSS (chạy trong mạng LAN) |
 
@@ -76,6 +79,7 @@ Thiết kế và hiện thực một hệ thống gọi món qua QR trong đó m
 * **Chống quá tải nhiều lớp** với token bucket tự cài đặt.
 * Một **khung thực nghiệm** so sánh baseline và đề xuất trên cùng mã nguồn, bật/tắt lúc chạy; client STOMP do nhóm tự viết được dùng chung cho trình duyệt và bộ sinh tải.
 * **Xác nhận thanh toán server-to-server có chữ ký, idempotent**: IPN của VNPay được kiểm chữ ký HMAC-SHA512 và số tiền, ghi nhận bằng `UPDATE` có điều kiện trạng thái nên gọi lặp không ghi nhận hai lần; có đường dự phòng (Return URL có chữ ký, tra cứu `querydr`) khi IPN bị lạc. Phiên bàn và lần thanh toán đang chờ được giữ duy nhất bằng `UPDATE` có điều kiện và ràng buộc `UNIQUE` của cơ sở dữ liệu.
+* **Áp dụng lại cùng bộ cơ chế cho các nghiệp vụ mới**: lượt gọi phục vụ được gộp bằng `UNIQUE (open_session_id)`; huỷ / trả lại món dùng khoá lạc quan, tách dòng trong một giao dịch và sự kiện `ORDER_UPDATED` mang cả đơn mới nhất để client gộp theo `version` (nhận lặp vẫn cho cùng kết quả).
 
 ### 1.7. Cấu trúc báo cáo
 
@@ -263,13 +267,13 @@ Khoá chính của bảng `idempotency_key` là điểm tuần tự hoá: dù ha
 
 ### 4.5. Máy trạng thái và khoá lạc quan
 
-```text
-PENDING ──▶ ACCEPTED ──▶ COOKING ──▶ READY ──▶ SERVED
-   │
-   └──▶ CANCELLED   (chỉ khi còn PENDING)
-```
+> **[CHÈN HÌNH 1: `statics/state-machine.png` – Máy trạng thái của một món]**
+>
+> *Prompt cho GPT sinh ảnh:* Vẽ sơ đồ máy trạng thái (state machine) của một món ăn. Năm trạng thái xếp ngang từ trái sang phải, nối bằng mũi tên: "PENDING (Chờ bếp nhận)" → "ACCEPTED (Đã nhận)" → "COOKING (Đang nấu)" → "READY (Sẵn sàng)" → "SERVED (Đã phục vụ)". Bên dưới là trạng thái "CANCELLED (Đã huỷ)" màu đỏ nhạt. Mũi tên từ PENDING xuống CANCELLED ghi "khách huỷ đơn / bếp Từ chối". Các mũi tên nét đứt từ ACCEPTED, COOKING, READY, SERVED xuống CANCELLED ghi chung "bếp huỷ / khách trả lại (có lý do, có thể huỷ một phần)". Góc dưới ghi chú nhỏ: "Mọi chuyển trạng thái: UPDATE … WHERE version = ? (khoá lạc quan)". Phong cách: sơ đồ kỹ thuật phẳng, nền trắng, nét mảnh, màu dịu (xanh dương, xám, cam nhấn), chữ tiếng Việt có dấu rõ ràng, font sans-serif, không trang trí, không người hay biểu tượng hoạt hình, tỉ lệ 16:9, đủ nét để in A4.
 
-Mọi chuyển trạng thái khác bị từ chối với `409 INVALID_STATE_TRANSITION` kèm danh sách trạng thái được phép. Mỗi món có cột `version`. Request đổi trạng thái gửi kèm `version` client đã thấy; máy chủ chạy
+Màn hình bếp xếp **từng món** vào cột theo trạng thái của chính món đó (Mới = `PENDING`, Đang làm = `ACCEPTED`/`COOKING`, Sẵn sàng = `READY`), không theo trạng thái gộp của cả đơn; một đơn có thể nằm ở nhiều cột, mỗi thẻ ghi thêm "+N món của đơn này ở cột khác". Nhờ đó bếp thao tác món nào thì món đó chuyển cột ngay, không phải chờ cả đơn.
+
+Đường `PATCH …/status` chỉ cho các bước tiến ở hàng trên; đường huỷ món đã nhận đi qua API riêng (mục 4.11) vì cần thêm số suất và lý do. Mọi chuyển trạng thái khác bị từ chối với `409 INVALID_STATE_TRANSITION` kèm danh sách trạng thái được phép. Mỗi món có cột `version`. Request đổi trạng thái gửi kèm `version` client đã thấy; máy chủ chạy
 
 ```sql
 UPDATE order_item SET status = ?, version = version + 1, updated_at = ? WHERE id = ? AND version = ?
@@ -321,6 +325,10 @@ Lưu ý: ở `NAIVE_PUSH`, máy chủ vẫn ghi nhật ký sự kiện như bìn
 | Đơn chung của bàn trên `/topic/table.{id}`; mã thiết bị chỉ dùng để xác định quyền huỷ, không trả ra ngoài | Mỗi máy chỉ thấy đơn của mình | Cả bàn theo dõi và thanh toán chung một hóa đơn |
 | Xác nhận VNPay bằng IPN có chữ ký + tra cứu `querydr` dự phòng | Chỉ tin kết quả trên Return URL của trình duyệt | Trình duyệt có thể bị đóng giữa chừng; mọi kết quả đều phải có chữ ký và số tiền khớp |
 | Một lần thanh toán đang chờ mỗi phiên bằng `UNIQUE (pending_session_id)` | Khoá bằng `synchronized` trong RAM | Database tự phân xử, đúng cả khi request đi qua nhiều thread |
+| Một lượt gọi phục vụ đang mở mỗi phiên bằng `UNIQUE (open_session_id)` | Chống bấm lặp ở giao diện (khoá nút) | Giao diện không chặn được hai điện thoại khác nhau; ràng buộc CSDL gộp mọi trường hợp |
+| Huỷ một phần bằng cách tách dòng (dòng cũ bớt số suất, phần huỷ thành dòng `CANCELLED` mới) | Thêm cột "số suất đã huỷ" | Giữ nguyên mô hình "một dòng = một trạng thái": hóa đơn vẫn là tổng các dòng không `CANCELLED`, bếp và khách không phải đổi cách hiển thị |
+| `ORDER_UPDATED` mang cả đơn mới nhất | Gửi riêng từng thay đổi (giảm số suất, thêm dòng) | Huỷ một phần đổi hai dòng cùng lúc; gửi cả đơn để client gộp theo `version` thì nhận lặp hay phát bù vẫn cho cùng kết quả |
+| Chặn huỷ món khi bàn đang có lần thanh toán chờ | Cho huỷ rồi điều chỉnh lần đang chờ | Số tiền của lần đang chờ đã chốt (có thể đã gửi sang VNPay); đổi giữa chừng sẽ lệch tiền |
 
 ### 4.9. Phiên bàn, đơn chung và thanh toán
 
@@ -344,9 +352,38 @@ Nếu 0 dòng bị ảnh hưởng (máy khác vừa mở trước), giao dịch 
 2. **Return URL** (`GET /api/payments/vnpay/return`): trình duyệt khách được chuyển về kèm dữ liệu có chữ ký; máy chủ kiểm tra, ghi nhận như IPN rồi chuyển về trang gọi món.
 3. **Tra cứu `querydr`**: trước khi đánh dấu `EXPIRED` một lần VNPay còn `PENDING`, tác vụ định kỳ hỏi API tra cứu của VNPay (HTTPS, chữ ký HMAC-SHA512).
 
-Tiền VNPay về muộn cho lần đã hết hạn hoặc đã huỷ vẫn được ghi `PAID`; nếu khi đó hóa đơn đã được trả đủ bằng cách khác thì bật cờ `needs_refund` để thu ngân hoàn tiền. Mã merchant và khoá bí mật chỉ được cấu hình bằng biến môi trường; thiếu thì lựa chọn VNPay bị ẩn.
+Tiền VNPay về muộn cho lần đã hết hạn hoặc đã huỷ vẫn được ghi `PAID`; nếu khi đó hóa đơn đã được trả đủ bằng cách khác thì bật cờ `needs_refund` để thu ngân hoàn tiền. Mã merchant và khoá bí mật của môi trường **sandbox** có giá trị mặc định trong `application.yml` để máy nào lấy mã nguồn về cũng chạy được ngay; biến môi trường `VNPAY_TMN_CODE` / `VNPAY_HASH_SECRET` ghi đè giá trị này, để trống thì lựa chọn VNPay bị ẩn. Khoá production không bao giờ được ghi vào mã nguồn.
 
 Mọi thay đổi về thanh toán và trạng thái bàn được phát sau commit dưới dạng `PAYMENT_UPDATED`, `TABLE_STATE_CHANGED`, `TABLE_SESSION_ENDED` tới `/topic/table.{id}` và `/topic/cashier`. Các thông báo này **không** đi vào nhật ký `order_event`: trang khách và trang thu ngân tải lại trạng thái qua REST mỗi khi kết nối lại.
+
+### 4.10. Gọi phục vụ
+
+Khách bấm **Gọi phục vụ** trên trang gọi món; quầy lễ tân (trang thu ngân) nhận thông báo ngay, kêu một tiếng và làm nhấp nháy ô bàn trên sơ đồ, rồi điều phối nhân viên qua bộ đàm (ngoài hệ thống) và bấm **Đã xử lý**. Yêu cầu chính về mặt mạng là **không báo trùng**: một khách bấm nhiều lần, hoặc nhiều điện thoại cùng bàn bấm gần như cùng lúc, chỉ được tạo một lượt gọi.
+
+Bảng `service_call` có cột `open_session_id` mang giá trị `session_id` khi lượt gọi còn mở và `NULL` khi đã xử lý, kèm ràng buộc `UNIQUE` (cùng kỹ thuật với `pending_session_id` ở mục 4.9). `POST /api/service-calls` chạy:
+
+1. Kiểm tra token bàn và `X-Session-Id` (máy của lượt khách cũ → `409 SESSION_ENDED`).
+2. Phiên đã có lượt đang mở → trả lượt đó với `200`.
+3. Ngược lại `INSERT` lượt mới với `open_session_id = session_id` → `201`. Nếu `INSERT` vấp ràng buộc `UNIQUE` (máy khác vừa chèn trước), bắt `DuplicateKeyException`, đọc lại lượt đang mở và trả `200`.
+
+Chỉ request tạo được lượt mới mới phát `SERVICE_CALL_UPDATED` lên `/topic/cashier` và `/topic/table.{id}`, nên quầy chỉ nhận đúng một thông báo. Khi lễ tân bấm "Đã xử lý", máy chủ chạy `UPDATE service_call SET handled_at = ?, handled_by = ?, open_session_id = NULL WHERE id = ? AND open_session_id IS NOT NULL`; nếu 0 dòng thay đổi (người khác đã xử lý trước) thì trả trạng thái hiện tại mà không phát thêm sự kiện. Mọi điện thoại của bàn nhận `SERVICE_CALL_UPDATED` có `handledAt` và hiện "Nhân viên đã nhận yêu cầu và đang tới bàn bạn". Danh sách lượt đang chờ chỉ lấy các lượt thuộc phiên còn hoạt động (`restaurant_table.current_session_id = service_call.session_id`), nên "Trả bàn" làm lượt gọi của phiên đó tự biến mất. Cũng như thông báo thanh toán, sự kiện này không vào nhật ký `seq`; trang khách và trang thu ngân đồng bộ lại bằng REST (`GET /api/service-calls/current`, `GET /api/cashier/service-calls`) sau mỗi lần kết nối lại.
+
+### 4.11. Bếp huỷ hoặc ghi nhận khách trả lại món đã nhận
+
+Trước đây món chỉ huỷ được khi còn `PENDING`. Thực tế bếp còn cần huỷ món đã nhận (hết nguyên liệu, làm hỏng, khách đổi ý) và ghi nhận khách trả lại món đã phục vụ. Theo yêu cầu nghiệp vụ, chỉ màn hình bếp có quyền này. `POST /api/kitchen/order-items/{id}/void` nhận `{quantity, reason, note, version}`; `reason` thuộc `OUT_OF_STOCK`, `KITCHEN_MISTAKE`, `CUSTOMER_CHANGED_MIND`, `RETURNED`, `OTHER` (lý do `OTHER` bắt buộc có ghi chú). Trong một `TransactionTemplate`, máy chủ:
+
+1. Đọc món, so `version` (sai → `409 VERSION_CONFLICT`). Món `PENDING` phải dùng "Từ chối", món đã `CANCELLED` không huỷ lại (→ `409 INVALID_STATE_TRANSITION`); `quantity` lớn hơn số suất của dòng → `400`.
+2. Phiên của đơn đang có lần thanh toán chờ → `409 PAYMENT_IN_PROGRESS`, vì số tiền của lần đó đã chốt (có thể đã gửi sang VNPay).
+3. Huỷ **cả dòng**: `UPDATE order_item SET status = 'CANCELLED', version = version + 1, cancel_reason = ?, cancel_note = ?, cancelled_by = ? WHERE id = ? AND version = ?`. Huỷ **một phần**: `UPDATE order_item SET quantity = quantity - ?, version = version + 1 WHERE id = ? AND version = ? AND quantity > ?`, rồi `INSERT` một dòng mới cùng món, cùng giá, trạng thái `CANCELLED` với số suất bị huỷ và lý do. Nếu câu `UPDATE` trả 0 dòng (máy bếp khác vừa sửa món) thì toàn bộ giao dịch rollback và trả `409`; vì vậy hai máy bếp cùng huỷ một món thì chỉ một máy thành công (e2e nhóm 18 đo trực tiếp trường hợp này).
+4. Món còn `ACCEPTED` (chưa bắt đầu nấu) thì cộng lại tồn kho; món đã nấu thì không.
+5. Tính lại `orders.total` theo các dòng không huỷ và suy lại trạng thái đơn.
+6. Ghi sự kiện `ORDER_UPDATED` vào `order_event` (có `seq`, nên bếp mất mạng vẫn được phát bù) với payload `{order, change}`: `order` là bản đơn mới nhất, `change` mô tả thay đổi (`name`, `quantity`, `from`, `reason`, `note`, `by`). Sự kiện được phát sau commit tới `/topic/kitchen`, `/topic/table.{id}` và `/topic/cashier`.
+
+Client gộp `order` vào bản đang có theo từng món: món nào có `version` cao hơn thì lấy, món mới (dòng tách ra) thì thêm. Phép gộp này lũy đẳng, nên nhận một sự kiện hai lần hoặc nhận lại khi phát bù đều cho cùng kết quả. Điện thoại khách hiện ngay dòng "1× Phở · Hết nguyên liệu · Đã huỷ" và hóa đơn giảm tương ứng.
+
+**Tiền.** Hóa đơn vốn đã tính bằng tổng các món không `CANCELLED` (mục 4.9), nên món huỷ tự động không tính tiền. Nếu bàn đã thanh toán đủ trước khi món bị huỷ, tổng đã trả lớn hơn tổng hóa đơn; quầy thu ngân thấy bàn ở trạng thái `REFUND_DUE` kèm `refundDue = đã trả − tổng`. "Trả bàn" khi còn `refundDue > 0` bị từ chối bằng `409 CONFIRM_REQUIRED` (kèm `details.refundDue`) cho tới khi thu ngân gửi lại với `refundReturned: true`; máy chủ ghi "Đã trả lại khách …đ" vào ghi chú kết thúc phiên. Tác vụ tự trả bàn sau khi thanh toán chỉ chạy khi số đã trả **bằng đúng** tổng hóa đơn, nên không tự đóng một bàn còn nợ tiền khách.
+
+**Món đã phục vụ.** Món `SERVED` không còn trên bảng bếp, nên màn hình bếp có thêm danh sách "Món đã phục vụ" lấy từ `GET /api/kitchen/served-orders` (các đơn có món `SERVED` của những bàn đang có khách) để bếp chọn món khách trả lại.
 
 ---
 
@@ -354,42 +391,10 @@ Mọi thay đổi về thanh toán và trạng thái bàn được phát sau com
 
 ### 5.1. Sơ đồ
 
-> [CHÈN HÌNH: `statics/architecture.png` – nhóm vẽ lại từ sơ đồ dưới đây]
 
-```text
- ┌──────────────────┐ ┌───────────────────┐ ┌──────────────────┐ ┌────────────────┐
- │ Ứng dụng khách   │ │ Màn hình bếp (KDS)│ │ Thu ngân         │ │ Quản trị       │
- │ /t/:token        │ │ /kitchen          │ │ /cashier         │ │ /admin         │
- │ api.js,connection│ │ kitchenFeed.js    │ │                  │ │                │
- └──┬──────▲────────┘ └──┬──────▲─────────┘ └──┬──────▲────────┘ └──┬─────────────┘
-    │REST  │STOMP        │REST  │STOMP          │REST  │STOMP         │REST
-    │      │/topic/      │      │/topic/kitchen │      │/topic/cashier│
-    │      │ table.N     │      │/user/queue/   │      │              │
-    ▼      │             ▼      │ replay        ▼      │              ▼
- ┌──────────────────────────────────────────────────────────────────────────┐
- │ Spring Boot (Tomcat NIO, cổng 8080)                                        │
- │  RateLimitInterceptor ─▶ REST controllers      WebSocket /ws + STOMP       │
- │  StaffAuthInterceptor    (Public, Order,        StompAuthInterceptor       │
- │                           Kitchen, Payment,     KitchenWsController        │
- │                           Cashier, Admin)       SessionRegistry            │
- │                               │                 Simple broker (RAM)        │
- │                               ▼                         ▲                  │
- │        OrderService ──▶ EventStore (order_event)        │                  │
- │        TableService     EventPublisher ──afterCommit────┘                  │
- │        PaymentService, CashierService (tác vụ định kỳ mỗi phút)            │
- │        VnpayGateway (ký/kiểm HMAC-SHA512, querydr) ◀──IPN──┐  ──HTTPS──┐   │
- │        MenuService (cache + ETag), AuthService (HMAC)      │           │   │
- └──────────────────────────────┬─────────────────────────────┼───────────┼───┘
-                                │ JDBC (HikariCP, 20 kết nối) │           ▼
-                                ▼                       ┌─────┴──────────────┐
-            ┌──────────────────────────────────────┐    │ VNPay sandbox      │
-            │ MySQL 8 (hoặc H2 chế độ MySQL)        │    │ (cổng thanh toán)  │
-            │ restaurant_table, table_session,      │    └────────────────────┘
-            │ category, menu_item, orders,          │
-            │ order_item, order_event,              │
-            │ idempotency_key, payment, staff       │
-            └──────────────────────────────────────┘
-```
+> **[CHÈN HÌNH 2: `statics/architecture.png` – Kiến trúc hệ thống QR Order]**
+>
+> *Prompt cho GPT sinh ảnh:* Vẽ sơ đồ kiến trúc client–server gồm 3 tầng. Tầng trên: 4 khối client cạnh nhau: "Ứng dụng khách /t/:token", "Màn hình bếp /kitchen (kitchenFeed.js)", "Thu ngân / lễ tân /cashier", "Quản trị /admin". Mỗi client có 2 đường nối xuống máy chủ: đường "REST/HTTP" (mũi tên xuống) và đường "WebSocket + STOMP" (mũi tên lên), ghi topic tương ứng: khách "/topic/table.{id}", bếp "/topic/kitchen, /user/queue/replay", thu ngân "/topic/cashier"; quản trị chỉ có REST. Tầng giữa: khối lớn "Spring Boot – Tomcat NIO, cổng 8080", bên trong chia hai cột: cột trái "RateLimitInterceptor → StaffAuthInterceptor → REST controllers (Public, Order, Kitchen, Payment, Cashier, ServiceCall, Admin)"; cột phải "WebSocket /ws: StompAuthInterceptor, KitchenWsController, SessionRegistry, Simple broker (RAM)". Bên dưới hai cột là dãy service: "OrderService", "TableService", "PaymentService / CashierService (tác vụ mỗi phút)", "ServiceCallService", "MenuService (cache + ETag)", "AuthService (HMAC)", và "EventStore (order_event)" nối tới "EventPublisher" bằng mũi tên ghi "afterCommit" đi lên broker. Tầng dưới: hình trụ cơ sở dữ liệu "MySQL 8 (hoặc H2)" liệt kê bảng: restaurant_table, table_session, menu_item, orders, order_item, order_event, idempotency_key, payment, service_call, staff; nối với máy chủ bằng "JDBC – HikariCP 20 kết nối". Bên phải ngoài cùng: khối "VNPay sandbox" nối với "VnpayGateway (HMAC-SHA512)" bằng hai mũi tên: "IPN (VNPay gọi vào)" và "querydr qua HTTPS (máy chủ gọi ra)". Phong cách: sơ đồ kỹ thuật phẳng, nền trắng, nét mảnh, màu dịu (xanh dương, xám, cam nhấn), chữ tiếng Việt có dấu rõ ràng, font sans-serif, không trang trí, không người hay biểu tượng hoạt hình, tỉ lệ 16:9, đủ nét để in A4.
 
 ### 5.2. Các thành phần
 
@@ -544,9 +549,9 @@ Content-Type: application/json
 
 | Hướng | Đích | `type` / nội dung |
 |---|---|---|
-| Máy chủ → Bếp, Khách | `/topic/kitchen`, `/topic/table.{id}` | `ORDER_CREATED` (đơn đầy đủ, có `guestName` và cờ `firstInSession` – bếp hiện nhãn "Bàn mới mở"), `ITEM_STATUS_CHANGED` (`orderItemId`, `from`, `to`, `version`, `orderStatus`, `by`…), `ORDER_CANCELLED`. Không chứa mã thiết bị |
-| Máy chủ → Khách | `/topic/table.{id}` | `PAYMENT_UPDATED {tableId, payment}`, `TABLE_SESSION_ENDED {tableId, sessionId}`, `TABLE_CLOSED` (không có `seq`) |
-| Máy chủ → Thu ngân | `/topic/cashier` | `TABLE_STATE_CHANGED {tableId}`, `PAYMENT_UPDATED {tableId, payment}` (không có `seq`) |
+| Máy chủ → Bếp, Khách | `/topic/kitchen`, `/topic/table.{id}` | `ORDER_CREATED` (đơn đầy đủ, có `guestName` và cờ `firstInSession` – bếp hiện nhãn "Bàn mới mở"), `ITEM_STATUS_CHANGED` (`orderItemId`, `from`, `to`, `version`, `orderStatus`, `by`…), `ORDER_CANCELLED`, `ORDER_UPDATED {order, change}` (bếp huỷ / khách trả lại món: `order` là cả đơn mới nhất, `change` gồm `name`, `quantity`, `from`, `reason`, `note`, `by`). Không chứa mã thiết bị |
+| Máy chủ → Khách | `/topic/table.{id}` | `PAYMENT_UPDATED {tableId, payment}`, `SERVICE_CALL_UPDATED {tableId, call}`, `TABLE_SESSION_ENDED {tableId, sessionId}`, `TABLE_CLOSED` (không có `seq`) |
+| Máy chủ → Thu ngân | `/topic/cashier` | `TABLE_STATE_CHANGED {tableId}`, `PAYMENT_UPDATED {tableId, payment}`, `SERVICE_CALL_UPDATED {tableId, call}` (`call.handledAt = null` là lượt gọi mới) (không có `seq`) |
 | Máy chủ → Tất cả | `/topic/menu` | `MENU_UPDATED {version}` |
 | Máy chủ → Bếp | `/topic/kitchen` | `CONFIG_CHANGED {settings}` (không có `seq`) |
 | Bếp → Máy chủ | `/app/ack` | `{seq}` |
@@ -558,81 +563,46 @@ Content-Type: application/json
 
 **(a) Đặt món và giao tới bếp**
 
-```text
-Khách               Máy chủ                         CSDL                  Bếp
-  │ POST /api/orders   │                               │                    │
-  │ Idempotency-Key: K │                               │                    │
-  │───────────────────▶│ rate limit, token bàn         │                    │
-  │                    │ BEGIN                         │                    │
-  │                    │── INSERT idempotency_key(K) ─▶│                    │
-  │                    │── INSERT orders, order_item ─▶│                    │
-  │                    │── INSERT order_event → seq=n ▶│                    │
-  │                    │ COMMIT                        │                    │
-  │◀── 201 {order} ────│ afterCommit:                  │                    │
-  │                    │── MESSAGE ORDER_CREATED seq=n ───────────────────────▶│
-  │◀── MESSAGE (bàn) ──│                               │                    │
-  │                    │◀────────────────────────────────── SEND /app/ack n ─│
-```
+> **[CHÈN HÌNH 3: `statics/seq-order.png` – Đặt món và giao tới bếp]**
+>
+> *Prompt cho GPT sinh ảnh:* Sơ đồ trình tự (sequence diagram) kiểu UML: các cột đối tượng ở trên cùng với đường sống (lifeline) kẻ dọc, mũi tên ngang đánh số thứ tự từ trên xuống, mũi tên nét liền cho request, nét đứt cho response, mũi tên đôi đậm cho message WebSocket đẩy từ máy chủ. Bốn cột: "Khách", "Máy chủ", "CSDL", "Bếp". Các bước: (1) Khách → Máy chủ: "POST /api/orders, Idempotency-Key: K"; (2) Máy chủ tự kiểm "rate limit, token bàn"; (3) khung giao dịch "BEGIN … COMMIT" bao quanh các mũi tên Máy chủ → CSDL: "INSERT idempotency_key(K)", "INSERT orders, order_item", "INSERT order_event → seq = n"; (4) Máy chủ → Khách (nét đứt): "201 {order}"; (5) nhãn "afterCommit" rồi Máy chủ ⇒ Bếp: "MESSAGE ORDER_CREATED seq = n", đồng thời Máy chủ ⇒ Khách: "MESSAGE (topic bàn)"; (6) Bếp → Máy chủ: "SEND /app/ack {n}". Phong cách: sơ đồ kỹ thuật phẳng, nền trắng, nét mảnh, màu dịu (xanh dương, xám, cam nhấn), chữ tiếng Việt có dấu rõ ràng, font sans-serif, không trang trí, không người hay biểu tượng hoạt hình, tỉ lệ 16:9, đủ nét để in A4.
 
 **(b) Mất phản hồi và gửi lại**
 
-```text
-Khách                         Máy chủ
-  │ POST (K, body) ───────────▶│ tạo đơn #17, commit
-  │   ✕ phản hồi bị mất         │
-  │ (timeout 5 s, backoff)      │
-  │ POST (K, body) ───────────▶│ K đã có, hash khớp
-  │◀── 200 #17, Idempotent-Replayed: true
-```
+> **[CHÈN HÌNH 4: `statics/seq-idempotency.png` – Mất phản hồi và gửi lại cùng Idempotency-Key]**
+>
+> *Prompt cho GPT sinh ảnh:* Sơ đồ trình tự (sequence diagram) kiểu UML: các cột đối tượng ở trên cùng với đường sống (lifeline) kẻ dọc, mũi tên ngang đánh số thứ tự từ trên xuống, mũi tên nét liền cho request, nét đứt cho response, mũi tên đôi đậm cho message WebSocket đẩy từ máy chủ. Hai cột: "Khách", "Máy chủ". (1) Khách → Máy chủ: "POST (K, body)"; Máy chủ: "tạo đơn #17, commit"; (2) mũi tên phản hồi bị cắt giữa chừng với dấu ✕ đỏ và nhãn "phản hồi bị mất"; (3) phía Khách: "timeout 5 s, chờ backoff"; (4) Khách → Máy chủ: "POST (K, body) lần 2"; Máy chủ: "K đã có, hash khớp"; (5) Máy chủ → Khách (nét đứt, xanh lá): "200 – đơn #17, Idempotent-Replayed: true". Chú thích dưới: "Không tạo đơn thứ hai". Phong cách: sơ đồ kỹ thuật phẳng, nền trắng, nét mảnh, màu dịu (xanh dương, xám, cam nhấn), chữ tiếng Việt có dấu rõ ràng, font sans-serif, không trang trí, không người hay biểu tượng hoạt hình, tỉ lệ 16:9, đủ nét để in A4.
 
 **(c) Hai đầu bếp cùng cập nhật**
 
-```text
-Bếp A                    Máy chủ                    Bếp B
-  │ PATCH {ACCEPTED, v=0} ──▶│◀── PATCH {CANCELLED, v=0} │
-  │                          │ A: UPDATE … WHERE version=0 → 1 dòng
-  │◀── 200 {version: 1} ─────│ B: version hiện tại 1 ≠ 0
-  │                          │──── 409 VERSION_CONFLICT ─▶│ (tải lại ảnh chụp)
-  │◀═ ITEM_STATUS_CHANGED ═══│═══ ITEM_STATUS_CHANGED ═══▶│
-```
+> **[CHÈN HÌNH 5: `statics/seq-optimistic-lock.png` – Hai màn hình bếp cùng cập nhật một món]**
+>
+> *Prompt cho GPT sinh ảnh:* Sơ đồ trình tự (sequence diagram) kiểu UML: các cột đối tượng ở trên cùng với đường sống (lifeline) kẻ dọc, mũi tên ngang đánh số thứ tự từ trên xuống, mũi tên nét liền cho request, nét đứt cho response, mũi tên đôi đậm cho message WebSocket đẩy từ máy chủ. Ba cột: "Bếp A", "Máy chủ", "Bếp B". (1) Gần như cùng lúc: Bếp A → Máy chủ: "PATCH {ACCEPTED, version = 0}" và Bếp B → Máy chủ: "PATCH {CANCELLED, version = 0}"; (2) Máy chủ xử lý A: "UPDATE … WHERE version = 0 → 1 dòng"; (3) Máy chủ → Bếp A (nét đứt): "200 {version: 1}"; (4) Máy chủ xử lý B: "version hiện tại 1 ≠ 0"; (5) Máy chủ → Bếp B (nét đứt, đỏ): "409 VERSION_CONFLICT" kèm ghi chú "tải lại ảnh chụp"; (6) Máy chủ ⇒ cả hai bếp: "ITEM_STATUS_CHANGED". Phong cách: sơ đồ kỹ thuật phẳng, nền trắng, nét mảnh, màu dịu (xanh dương, xám, cam nhấn), chữ tiếng Việt có dấu rõ ràng, font sans-serif, không trang trí, không người hay biểu tượng hoạt hình, tỉ lệ 16:9, đủ nét để in A4.
 
 **(d) Mất kết nối và phát bù**
 
-```text
-Bếp                              Máy chủ
-  │◀── MESSAGE seq=41 ─────────────│
-  │─── SEND /app/ack {41} ────────▶│
-  │  ✕ mất mạng (TCP bị cắt)        │  seq 42, 43, 44 được phát, không tới bếp
-  │  … backoff 1 s × jitter …       │
-  │─── WebSocket + CONNECT ───────▶│
-  │◀── CONNECTED ──────────────────│
-  │─── SUBSCRIBE /topic/kitchen ──▶│
-  │─── SUBSCRIBE /user/queue/replay▶│
-  │─── SEND /app/resume {41} ─────▶│  SELECT … WHERE seq > 41 ORDER BY seq LIMIT 500
-  │◀── REPLAY_BATCH [42,43,44], latestSeq=44, hasMore=false
-  │─── ACK 42, ACK 43, ACK 44 ────▶│
-```
+> **[CHÈN HÌNH 6: `statics/seq-resume.png` – Mất kết nối và phát bù (RESUME / REPLAY_BATCH)]**
+>
+> *Prompt cho GPT sinh ảnh:* Sơ đồ trình tự (sequence diagram) kiểu UML: các cột đối tượng ở trên cùng với đường sống (lifeline) kẻ dọc, mũi tên ngang đánh số thứ tự từ trên xuống, mũi tên nét liền cho request, nét đứt cho response, mũi tên đôi đậm cho message WebSocket đẩy từ máy chủ. Hai cột: "Bếp", "Máy chủ". (1) Máy chủ ⇒ Bếp: "MESSAGE seq = 41"; (2) Bếp → Máy chủ: "ACK 41"; (3) dải ngang màu xám nhạt có dấu ✕ ghi "mất mạng – TCP bị cắt", trong dải đó phía Máy chủ ghi "seq 42, 43, 44 được phát, không tới bếp"; (4) phía Bếp: "chờ backoff 1 s × jitter"; (5) Bếp → Máy chủ lần lượt: "WebSocket + CONNECT", Máy chủ → Bếp: "CONNECTED", Bếp → Máy chủ: "SUBSCRIBE /topic/kitchen", "SUBSCRIBE /user/queue/replay", "SEND /app/resume {41}"; (6) Máy chủ đọc CSDL: "SELECT … WHERE seq > 41 ORDER BY seq LIMIT 500"; (7) Máy chủ ⇒ Bếp: "REPLAY_BATCH [42, 43, 44], latestSeq = 44, hasMore = false"; (8) Bếp → Máy chủ: "ACK 42, 43, 44". Phong cách: sơ đồ kỹ thuật phẳng, nền trắng, nét mảnh, màu dịu (xanh dương, xám, cam nhấn), chữ tiếng Việt có dấu rõ ràng, font sans-serif, không trang trí, không người hay biểu tượng hoạt hình, tỉ lệ 16:9, đủ nét để in A4.
 
 **(e) Thanh toán VNPay và xác nhận server-to-server**
 
-```text
-Khách                Máy chủ                                   VNPay sandbox
-  │ POST /api/payments {VNPAY}, Idempotency-Key                    │
-  │─────────────────▶│ INSERT payment PENDING (UNIQUE pending_session_id)
-  │◀── 201 {payUrl} ─│ payUrl = tham số vnp_* đã sắp xếp + vnp_SecureHash (HMAC-SHA512)
-  │── chuyển hướng tới payUrl ────────────────────────────────────▶│
-  │                  │◀── IPN ?vnp_…&vnp_SecureHash=… ─────────────│
-  │                  │ kiểm chữ ký, tìm giao dịch, so số tiền      │
-  │                  │ UPDATE payment SET status='PAID' … WHERE status IN (…)
-  │                  │──── {"RspCode":"00"} ──────────────────────▶│
-  │◀═ PAYMENT_UPDATED (PAID) ═│ (cũng tới /topic/cashier)          │
-  │                  │◀── IPN gửi lại ─────────────────────────────│
-  │                  │──── {"RspCode":"02"} (đã xử lý) ───────────▶│
-  │◀── 302 Return URL ?vnp_… (có chữ ký) ──────────────────────────│
-  │─────────────────▶│ kiểm chữ ký → đã PAID → 302 về /t/{qrToken}
-```
+> **[CHÈN HÌNH 7: `statics/seq-vnpay.png` – Thanh toán VNPay và xác nhận server-to-server]**
+>
+> *Prompt cho GPT sinh ảnh:* Sơ đồ trình tự (sequence diagram) kiểu UML: các cột đối tượng ở trên cùng với đường sống (lifeline) kẻ dọc, mũi tên ngang đánh số thứ tự từ trên xuống, mũi tên nét liền cho request, nét đứt cho response, mũi tên đôi đậm cho message WebSocket đẩy từ máy chủ. Ba cột: "Khách (trình duyệt)", "Máy chủ", "VNPay sandbox". (1) Khách → Máy chủ: "POST /api/payments {VNPAY}, Idempotency-Key"; Máy chủ: "INSERT payment PENDING (UNIQUE pending_session_id)"; (2) Máy chủ → Khách: "201 {payUrl}" kèm ghi chú "tham số vnp_* sắp xếp + vnp_SecureHash (HMAC-SHA512)"; (3) Khách → VNPay: "chuyển hướng tới payUrl, khách trả tiền"; (4) VNPay → Máy chủ: "IPN ?vnp_…&vnp_SecureHash"; Máy chủ: "kiểm chữ ký, so số tiền, UPDATE status = PAID WHERE status IN (…)"; (5) Máy chủ → VNPay: "RspCode 00"; (6) Máy chủ ⇒ Khách và quầy thu ngân: "PAYMENT_UPDATED (PAID)"; (7) VNPay → Máy chủ: "IPN gửi lại", Máy chủ → VNPay: "RspCode 02 (đã xử lý)"; (8) VNPay → Khách: "302 Return URL (có chữ ký)", Khách → Máy chủ, Máy chủ: "kiểm chữ ký → đã PAID → 302 về trang gọi món". Phong cách: sơ đồ kỹ thuật phẳng, nền trắng, nét mảnh, màu dịu (xanh dương, xám, cam nhấn), chữ tiếng Việt có dấu rõ ràng, font sans-serif, không trang trí, không người hay biểu tượng hoạt hình, tỉ lệ 16:9, đủ nét để in A4.
 
-> [CHÈN HÌNH: `statics/protocol.png` – nhóm vẽ lại các sơ đồ trình tự trên]
+**(f) Gọi phục vụ: hai điện thoại cùng bàn bấm gần như cùng lúc**
+
+> **[CHÈN HÌNH 8: `statics/seq-service-call.png` – Gọi phục vụ: hai điện thoại cùng bàn bấm gần như cùng lúc]**
+>
+> *Prompt cho GPT sinh ảnh:* Sơ đồ trình tự (sequence diagram) kiểu UML: các cột đối tượng ở trên cùng với đường sống (lifeline) kẻ dọc, mũi tên ngang đánh số thứ tự từ trên xuống, mũi tên nét liền cho request, nét đứt cho response, mũi tên đôi đậm cho message WebSocket đẩy từ máy chủ. Năm cột: "Khách A", "Khách B", "Máy chủ", "CSDL", "Quầy lễ tân". (1) Khách A → Máy chủ: "POST /api/service-calls"; Máy chủ → CSDL: "INSERT open_session_id = s" → "ok"; (2) Khách B → Máy chủ: "POST /api/service-calls"; Máy chủ → CSDL: "INSERT open_session_id = s" → dấu ✕ đỏ "trùng UNIQUE"; (3) Máy chủ → Khách A (nét đứt): "201 {lượt gọi #9}"; (4) Máy chủ → Khách B (nét đứt): "200 {lượt gọi #9}" với chú thích "bắt DuplicateKey, đọc lại lượt đang mở"; (5) Máy chủ ⇒ Quầy lễ tân: "SERVICE_CALL_UPDATED #9 (đúng một lần)", phía quầy có biểu tượng chuông và ghi "ting, ô bàn nhấp nháy"; (6) Quầy lễ tân → Máy chủ: "POST /api/cashier/service-calls/9/handle"; Máy chủ → CSDL: "UPDATE … SET open_session_id = NULL WHERE id = 9 AND open_session_id IS NOT NULL"; (7) Máy chủ ⇒ Khách A và Khách B: "SERVICE_CALL_UPDATED (đã xử lý)", phía khách ghi "Nhân viên đang tới". Phong cách: sơ đồ kỹ thuật phẳng, nền trắng, nét mảnh, màu dịu (xanh dương, xám, cam nhấn), chữ tiếng Việt có dấu rõ ràng, font sans-serif, không trang trí, không người hay biểu tượng hoạt hình, tỉ lệ 16:9, đủ nét để in A4.
+
+**(g) Khách trả lại món sau khi bàn đã thanh toán**
+
+> **[CHÈN HÌNH 9: `statics/seq-void-refund.png` – Khách trả lại món sau khi bàn đã thanh toán]**
+>
+> *Prompt cho GPT sinh ảnh:* Sơ đồ trình tự (sequence diagram) kiểu UML: các cột đối tượng ở trên cùng với đường sống (lifeline) kẻ dọc, mũi tên ngang đánh số thứ tự từ trên xuống, mũi tên nét liền cho request, nét đứt cho response, mũi tên đôi đậm cho message WebSocket đẩy từ máy chủ. Bốn cột: "Bếp", "Máy chủ", "Khách", "Thu ngân". (1) Bếp → Máy chủ: "POST …/order-items/31/void {quantity: 1, reason: RETURNED, version: 4}"; (2) khung giao dịch "BEGIN … COMMIT" trên cột Máy chủ gồm: "UPDATE quantity = quantity − 1 WHERE version = 4", "INSERT dòng CANCELLED (1 suất, RETURNED)", "UPDATE orders.total", "INSERT order_event → seq = n"; (3) Máy chủ → Bếp (nét đứt): "200 {order}"; (4) nhãn "afterCommit": Máy chủ ⇒ Bếp: "ORDER_UPDATED seq = n", Máy chủ ⇒ Khách: "ORDER_UPDATED" (phía khách ghi "Đã trả lại, không tính tiền"), Máy chủ ⇒ Thu ngân: "TABLE_STATE_CHANGED" (phía thu ngân ghi "REFUND_DUE, cần trả lại 55.000đ"); (5) Thu ngân → Máy chủ: "POST …/checkout {}"; Máy chủ → Thu ngân (đỏ): "409 CONFIRM_REQUIRED {refundDue}"; (6) Thu ngân xác nhận "Đã trả lại khách?" rồi → Máy chủ: "POST …/checkout {refundReturned: true}"; Máy chủ → Thu ngân (xanh lá): "200 – bàn trống". Phong cách: sơ đồ kỹ thuật phẳng, nền trắng, nét mảnh, màu dịu (xanh dương, xám, cam nhấn), chữ tiếng Việt có dấu rõ ràng, font sans-serif, không trang trí, không người hay biểu tượng hoạt hình, tỉ lệ 16:9, đủ nét để in A4.
+
 
 ### 6.7. Xử lý lỗi
 
@@ -645,7 +615,8 @@ Khách                Máy chủ                                   VNPay sandbox
 | Server unavailable | Khách giữ đơn chưa gửi trong `localStorage` và gửi lại với cùng khoá |
 | Timeout | Client REST hết hạn sau 5 s; query DB tối đa 3 s; chờ kết nối DB tối đa 3 s → `503` + `Retry-After` |
 | Duplicate request | Idempotency-Key + băm nội dung; request song song cùng khoá được ràng buộc khoá chính phân xử |
-| Invalid state | Máy trạng thái → `409 INVALID_STATE_TRANSITION`; `version` sai → `409 VERSION_CONFLICT`; máy của lượt khách cũ → `409 SESSION_ENDED`; đặt món khi đang thanh toán → `409 PAYMENT_IN_PROGRESS` |
+| Invalid state | Máy trạng thái → `409 INVALID_STATE_TRANSITION`; `version` sai → `409 VERSION_CONFLICT`; máy của lượt khách cũ → `409 SESSION_ENDED`; đặt món hoặc bếp huỷ món khi đang thanh toán → `409 PAYMENT_IN_PROGRESS`; huỷ món `PENDING` / món đã huỷ qua API huỷ → `409 INVALID_STATE_TRANSITION`; trả bàn khi còn nợ, còn món hoặc còn tiền dư chưa trả lại khách → `409 CONFIRM_REQUIRED` kèm `details` |
+| Yêu cầu trùng không đi kèm khoá idempotency | Gọi phục vụ bấm lặp / nhiều máy cùng bấm → ràng buộc `UNIQUE (open_session_id)` gộp về một lượt (`200` trả lượt đang mở); hai lễ tân cùng bấm "Đã xử lý" → `UPDATE` có điều kiện, người sau nhận trạng thái hiện tại, không phát sự kiện lần hai |
 | Dữ liệu thanh toán giả mạo | Sai chữ ký VNPay → `RspCode 97`; sai số tiền → `04`; không ghi nhận |
 | Mất xác nhận thanh toán | IPN không tới → Return URL có chữ ký, hoặc tra cứu `querydr` trước khi cho hết hạn; IPN gọi lặp → `02`, không ghi nhận hai lần; tiền về muộn → vẫn ghi nhận, bật `needs_refund` nếu đã trả đủ |
 | Database error | Giao dịch rollback, không phát sự kiện, trả `503` |
@@ -666,6 +637,7 @@ source/
 │       ├── table/      TableService (vào bàn, kết thúc phiên), TableInfo
 │       ├── payment/    PaymentService, PaymentController, PaymentRepository, VnpayGateway,
 │       │               CashierService, CashierController, PaymentDtos
+│       ├── servicecall/ ServiceCallService, ServiceCallController, ServiceCallRepository
 │       ├── menu/       MenuService (cache + ETag), MenuDtos
 │       ├── order/      OrderService, OrderRepository, IdempotencyRepository,
 │       │               OrderItemStatus, OrderStatus, OrderController, KitchenController
@@ -694,7 +666,9 @@ source/
 * **`TableService`**: `join` mở phiên bằng `UPDATE … WHERE current_session_id IS NULL AND status = 'OPEN'` trong `TransactionTemplate` (bên thua rollback rồi đọc lại); `requireSession` kiểm tra `X-Session-Id`; `endSession` kết thúc phiên có điều kiện `current_session_id = ?` và phát `TABLE_SESSION_ENDED`.
 * **`PaymentService`**: tính hóa đơn từ cơ sở dữ liệu; `create` xử lý `Idempotency-Key`, trả lại lần đang chờ nếu có, bắt `DuplicateKeyException` của `UNIQUE (pending_session_id)` khi hai máy cùng tạo; `confirmCash` dùng khoá lạc quan; `handleVnpayCallback` dùng chung cho IPN và Return URL (chữ ký → tìm giao dịch → số tiền → `UPDATE` có điều kiện); `expireOverdue` gọi `querydr` trước khi cho hết hạn.
 * **`VnpayGateway`**: tạo link thanh toán (tham số sắp xếp bằng `TreeMap`, URL-encode, HMAC-SHA512), kiểm chữ ký bằng `MessageDigest.isEqual`, gọi API `querydr` bằng `java.net.http.HttpClient` (timeout kết nối 5 s, request 10 s).
-* **`CashierService`**: sơ đồ bàn và chi tiết hóa đơn cho thu ngân; "Trả bàn" (bắt buộc lý do khi còn nợ/còn món); `@Scheduled` mỗi phút chạy `expireOverdue` và tự kết thúc phiên (`AUTO_IDLE`, `AUTO_AFTER_PAID`).
+* **`CashierService`**: sơ đồ bàn và chi tiết hóa đơn cho thu ngân (trạng thái `REFUND_DUE` và `refundDue` khi khách đã trả dư); "Trả bàn" (bắt buộc lý do khi còn nợ/còn món, bắt buộc xác nhận đã trả lại tiền dư); `@Scheduled` mỗi phút chạy `expireOverdue` và tự kết thúc phiên (`AUTO_IDLE`, `AUTO_AFTER_PAID` chỉ khi đã trả đúng bằng tổng).
+* **`OrderService.voidItem`**: bếp huỷ / ghi nhận khách trả lại món đã nhận (mục 4.11): khoá lạc quan, tách dòng khi huỷ một phần, hoàn tồn kho nếu chưa nấu, ghi `ORDER_UPDATED` vào nhật ký sự kiện trong cùng giao dịch.
+* **`ServiceCallService`**: gọi phục vụ (mục 4.10): `INSERT` dựa vào `UNIQUE (open_session_id)` và bắt `DuplicateKeyException` để gộp yêu cầu trùng; "Đã xử lý" bằng `UPDATE` có điều kiện; chỉ phát `SERVICE_CALL_UPDATED` khi trạng thái thực sự đổi.
 
 ### 7.3. Thư viện mạng phía client
 
@@ -712,6 +686,9 @@ source/
 | Cột `order_item.version` | CSDL | Khoá lạc quan |
 | Cột `restaurant_table.current_session_id` | CSDL | Phiên bàn hiện tại; `UPDATE` có điều kiện bảo đảm một phiên mỗi bàn |
 | Bảng `payment` (`pending_session_id` UNIQUE, `idempotency_key` UNIQUE, `txn_ref` UNIQUE, `version`) | CSDL | Một lần thanh toán đang chờ mỗi phiên; chống tạo trùng; khoá lạc quan khi xác nhận tiền mặt |
+| Bảng `service_call` (`open_session_id` UNIQUE) | CSDL | Một lượt gọi phục vụ đang mở mỗi phiên |
+| Cột `order_item.cancel_reason`, `cancel_note`, `cancelled_by` | CSDL | Lý do và người huỷ / ghi nhận trả lại món |
+| `Map<itemId, item>` gộp theo `version` (`mergeOrder`) | `format.js` (trang bếp, trang khách) | Áp dụng `ORDER_UPDATED` lũy đẳng |
 | `ConcurrentHashMap<String, ClientSession>` | `SessionRegistry` | Phiên WebSocket |
 | `ConcurrentHashMap<String, TokenBucket>` | `RateLimiter` | Bucket theo IP và theo bàn |
 | `Set<seq>` + mảng thứ tự (tối đa 20 000) | `KitchenFeed` | Loại trùng |
@@ -978,6 +955,8 @@ Các thực nghiệm E2–E4 cho thấy ba lỗi thường gặp ở ứng dụn
 | 7 | Client STOMP 1.2 tự viết và khung thực nghiệm | Mã hoá/giải mã frame, heart-beat, phát hiện kết nối chết; dùng chung cho trình duyệt và bộ sinh tải; baseline/đề xuất đổi lúc chạy | `stomp.js`, `connection.js`; `source/loadtest`; file kết quả trong `statics/results/` |
 | 8 | Xác nhận thanh toán server-to-server có chữ ký, idempotent | IPN của VNPay được kiểm chữ ký HMAC-SHA512 và số tiền do máy chủ tính; IPN, Return URL và tra cứu `querydr` dùng chung một `UPDATE … WHERE status IN (…)` nên gọi lặp chỉ ghi nhận một lần (`02`); tiền về muộn vẫn được ghi nhận và đánh dấu cần hoàn | Hiện thực: `PaymentService`, `VnpayGateway`. Test `vnpayIpnVerifiesSignatureAmountAndIsIdempotent` (`97`/`04`/`00`/`02`), `vnpayHmacMatchesWhenRecomputed`. Chưa có số liệu thực nghiệm |
 | 9 | Phiên bàn và thanh toán dùng chung cho nhiều điện thoại, an toàn khi đồng thời | Phiên bàn mở bằng `UPDATE … WHERE current_session_id IS NULL`; một lần thanh toán đang chờ mỗi phiên bằng `UNIQUE (pending_session_id)`; xác nhận tiền mặt bằng khoá lạc quan | Test `concurrentJoinOpensOnlyOneSession`, `cashPaymentFlowAndCheckout`; e2e nhóm 15, 16 |
+| 10 | Gọi phục vụ không báo trùng | Ràng buộc `UNIQUE (open_session_id)` gộp mọi lần bấm của cùng một bàn; chỉ request tạo được lượt mới mới phát sự kiện; "Đã xử lý" bằng `UPDATE` có điều kiện | Test `serviceCallIsDedupedPerSessionAndHandledByCashier`; e2e nhóm 17: 5 máy cùng bấm → 1 lượt, quầy nhận đúng 1 thông báo |
+| 11 | Huỷ / trả lại món đã nhận an toàn khi đồng thời | Khoá lạc quan + tách dòng trong một giao dịch; sự kiện `ORDER_UPDATED` có `seq`, client gộp theo `version`; tiền dư thành `REFUND_DUE`, trả bàn phải xác nhận | Test `kitchenVoidsPartOfAcceptedItemAndRestoresStock`, `returnedItemAfterPaymentRequiresRefundBeforeCheckout`; e2e nhóm 18: hai máy bếp cùng huỷ → đúng 1 thành công |
 
 **So sánh baseline và đề xuất**
 
@@ -1003,7 +982,11 @@ Các thực nghiệm E2–E4 cho thấy ba lỗi thường gặp ở ứng dụn
 8. **Khách hàng không dùng RESUME**: khi kết nối lại, ứng dụng khách tải lại toàn bộ danh sách đơn qua REST; đơn giản nhưng tốn hơn khi bàn có nhiều đơn.
 9. **Bảo mật cơ bản**: chưa có HTTPS/WSS; token nhân viên tự ký không thu hồi được trước hạn; mã QR tĩnh theo bàn, chỉ đổi khi quản trị bấm "đổi mã"; rate limit theo IP chưa phân biệt được nhiều điện thoại sau cùng một NAT.
 10. **Thanh toán mới ở mức sandbox và chưa được đo.** Chỉ chạy với môi trường thử của VNPay; chưa có thực nghiệm định lượng (độ trễ xác nhận, tỷ lệ IPN bị lạc). Hoàn tiền chỉ được đánh dấu (`needs_refund`) để thu ngân xử lý tay, chưa gọi API hoàn tiền. Các thông báo thanh toán không đi qua nhật ký `seq`, client phải tải lại qua REST khi kết nối lại. Người biết mã QR của bàn có thể vào phiên và thấy đơn chung của bàn đó.
-11. **Số liệu E1–E6 được đo trước khi thêm phiên bàn và thanh toán** (mục 4.9); E6 dùng giới hạn cũ 5 đơn/phút/bàn. Cần chạy lại để xác nhận các số liệu với mã nguồn hiện tại.
+11. **Số liệu E1–E6 được đo trước khi thêm phiên bàn, thanh toán, gọi phục vụ và huỷ món** (mục 4.9–4.11); E6 dùng giới hạn cũ 5 đơn/phút/bàn. Cần chạy lại để xác nhận các số liệu với mã nguồn hiện tại.
+12. **Gọi phục vụ và trả tiền dư chỉ được kiểm thử chức năng**, chưa đo (độ trễ từ lúc khách bấm tới lúc quầy nhận). Thông báo gọi phục vụ không vào nhật ký `seq`, quầy dựa vào việc tải lại qua REST khi kết nối lại. Việc trả lại tiền dư cho khách làm tay ở quầy (kể cả khi khách trả bằng VNPay); hệ thống chỉ ghi nhận đã trả.
+13. **`ORDER_UPDATED` gửi cả đơn** nên payload lớn hơn gửi riêng phần thay đổi; với đơn nhiều món, chi phí băng thông của sự kiện này chưa được đo.
+14. **Khoá VNPay sandbox nằm trong mã nguồn** để máy nào cũng chạy được ngay; chấp nhận được vì là môi trường thử, nhưng ai có mã nguồn cũng tạo được giao dịch thử bằng merchant của nhóm.
+15. **Nghiệp vụ POS chưa đầy đủ**: chưa có giảm giá, phí phục vụ, VAT; nhân viên chưa gọi món hộ khách; chưa chuyển / gộp bàn, tách hóa đơn, in hóa đơn; chưa có báo cáo doanh thu, chốt ca, quản lý tài khoản nhân viên; tuỳ chọn món (size, topping) chỉ ghi được bằng ghi chú.
 
 ---
 
@@ -1017,6 +1000,9 @@ Các thực nghiệm E2–E4 cho thấy ba lỗi thường gặp ở ứng dụn
 6. Dọn nhật ký và khoá idempotency theo TTL; nén payload hoặc chỉ gửi phần thay đổi; topic theo trạm bếp để giảm fan-out.
 7. HTTPS/WSS, mã QR có hạn dùng theo phiên bàn, thu hồi token nhân viên.
 8. Áp dụng RESUME cho ứng dụng khách để chỉ tải phần thay đổi.
+9. Đưa thông báo thanh toán và gọi phục vụ vào nhật ký `seq` (hoặc một nhật ký riêng cho quầy) để quầy thu ngân cũng được phát bù như bếp; đo độ trễ từ lúc khách gọi tới lúc quầy nhận.
+10. Gọi API hoàn tiền của VNPay khi có tiền dư từ giao dịch VNPay thay vì trả tay.
+11. Bổ sung nghiệp vụ POS: giảm giá / phí phục vụ / VAT (sửa số tiền có khoá lạc quan và phát sự kiện như mục 4.11), nhân viên gọi món hộ (dùng lại API đặt món idempotent), chuyển / gộp bàn, tách hóa đơn, in hóa đơn và phiếu bếp, báo cáo doanh thu theo ca, quản lý tài khoản nhân viên.
 
 ---
 
@@ -1097,15 +1083,21 @@ Báo cáo đã trình bày QR Order, một hệ thống gọi món qua QR có m�
 | POST | `/api/payments/{id}/cancel` | `X-Table-Token` | Huỷ lần đang chờ |
 | GET | `/api/payments/vnpay/ipn` | Chữ ký VNPay | Máy chủ VNPay gọi; trả `{RspCode, Message}` |
 | GET | `/api/payments/vnpay/return` | Chữ ký VNPay | Trình duyệt quay về; `302` về trang gọi món |
+| POST | `/api/service-calls` | `X-Table-Token` | Gọi phục vụ `{guestName}`, kèm `X-Session-Id`; `201` lượt mới, `200` nếu bàn đã có lượt đang mở |
+| GET | `/api/service-calls/current` | `X-Table-Token` | Lượt gọi đang mở của bàn; `204` nếu không có |
 | POST | `/api/auth/login` | – | `{username, password}` → token nhân viên |
 | GET | `/api/kitchen/orders` | Bearer | Ảnh chụp đơn đang mở + `latestSeq` |
 | GET | `/api/kitchen/events?afterSeq=` | Bearer | Dùng cho chế độ POLLING |
 | PATCH | `/api/kitchen/order-items/{id}/status` | Bearer | `{status, version}` |
+| POST | `/api/kitchen/order-items/{id}/void` | Bearer | Huỷ / ghi nhận trả lại món đã nhận `{quantity, reason, note, version}`; trả cả đơn mới nhất; `409 VERSION_CONFLICT`, `409 PAYMENT_IN_PROGRESS` |
+| GET | `/api/kitchen/served-orders` | Bearer | Đơn có món đã phục vụ của các bàn đang có khách |
 | GET | `/api/cashier/tables`, `/api/cashier/tables/{id}` | Bearer (CASHIER, ADMIN) | Sơ đồ bàn / chi tiết hóa đơn |
 | POST | `/api/cashier/tables/{id}/payments` | Bearer (CASHIER, ADMIN) | Thu tiền mặt tại quầy |
 | PATCH | `/api/cashier/payments/{id}/confirm` | Bearer (CASHIER, ADMIN) | `{version}`: "Đã nhận tiền" |
 | POST | `/api/cashier/payments/{id}/cancel` | Bearer (CASHIER, ADMIN) | Huỷ lần đang chờ |
-| POST | `/api/cashier/tables/{id}/checkout` | Bearer (CASHIER, ADMIN) | Trả bàn `{reason, note}`; `409 CONFIRM_REQUIRED` khi còn nợ/còn món mà chưa có lý do |
+| POST | `/api/cashier/tables/{id}/checkout` | Bearer (CASHIER, ADMIN) | Trả bàn `{reason, note, refundReturned}`; `409 CONFIRM_REQUIRED` khi còn nợ/còn món mà chưa có lý do, hoặc còn tiền dư chưa xác nhận trả lại khách |
+| GET | `/api/cashier/service-calls` | Bearer (CASHIER, ADMIN) | Các lượt khách gọi phục vụ đang chờ, cũ nhất trước |
+| POST | `/api/cashier/service-calls/{id}/handle` | Bearer (CASHIER, ADMIN) | "Đã xử lý"; bấm lặp không lỗi |
 | GET/POST | `/api/admin/tables`, `/tables/bulk`, `/tables/{id}/open`, `/close`, `/rotate-token` | Bearer (ADMIN) | Quản lý bàn và mã QR; `open`/`close` = phục vụ / ngừng phục vụ, `409 TABLE_HAS_GUESTS` khi đóng bàn có khách |
 | GET | `/api/admin/payments` | Bearer (ADMIN) | Lịch sử thanh toán |
 | GET/POST/PUT | `/api/admin/categories`, `/api/admin/menu-items[/{id}]` | Bearer (ADMIN) | Quản lý thực đơn |
@@ -1134,13 +1126,16 @@ table_session    (id PK, table_id FK, opened_at, closed_at, end_reason, end_note
 category         (id PK, name, sort_order)
 menu_item        (id PK, category_id FK, name, description, price, image_url, available, stock NULL, station)
 orders           (id PK, session_id FK, table_id FK, device_id, guest_name, status, total, created_at, updated_at)
-order_item       (id PK, order_id FK, menu_item_id FK, name, unit_price, quantity, note, status, version, station, updated_at)
+order_item       (id PK, order_id FK, menu_item_id FK, name, unit_price, quantity, note, status, version, station, updated_at,
+                  cancel_reason NULL, cancel_note NULL, cancelled_by NULL)   -- lý do khi bếp huỷ / khách trả lại món
 order_event      (seq PK AUTO_INCREMENT, event_id, order_id FK, table_id, type, payload TEXT, created_at)
 idempotency_key  (key_value PK, request_hash CHAR(64), order_id NULL, created_at)
 payment          (id PK, session_id, table_id, amount, method, status, version, txn_ref UNIQUE,
                   idempotency_key UNIQUE NULL, pending_session_id UNIQUE NULL, provider_txn_no,
                   provider_create_date, needs_refund, created_by_device, created_at, expires_at,
                   paid_at, updated_at, confirmed_by)
+service_call     (id PK, session_id FK, table_id FK, guest_name, open_session_id UNIQUE NULL,
+                  created_at, handled_at, handled_by)   -- open_session_id = session_id khi đang chờ, NULL khi đã xử lý
 ```
 
 Thời gian lưu dưới dạng epoch mili-giây (BIGINT). Tên món và giá được chụp lại vào `order_item` tại thời điểm đặt. Script đầy đủ: `source/server/src/main/resources/schema.sql`.
@@ -1162,7 +1157,7 @@ Thời gian lưu dưới dạng epoch mili-giây (BIGINT). Tên món và giá đ
 | `app.session.idle-timeout-minutes` | `30` | Phiên không có đơn nào quá 30 phút → tự kết thúc |
 | `app.session.auto-checkout-after-paid-minutes` | `30` | Đã trả đủ, 30 phút chưa ai bấm "Trả bàn" → tự trả bàn |
 | `app.payment.expire-minutes` | `15` | Hạn của một lần thanh toán |
-| `app.vnpay.tmn-code` / `hash-secret` | biến môi trường `VNPAY_TMN_CODE` / `VNPAY_HASH_SECRET`, mặc định trống | Thiếu thì ẩn VNPay; không ghi vào file |
+| `app.vnpay.tmn-code` / `hash-secret` | khoá **sandbox** của nhóm; biến môi trường `VNPAY_TMN_CODE` / `VNPAY_HASH_SECRET` ghi đè | Để trống thì ẩn VNPay; khoá production không ghi vào file |
 | `app.vnpay.pay-url` / `api-url` | sandbox của VNPay | Trang thanh toán / API `querydr` |
 | `app.vnpay.public-url` | biến môi trường `APP_PUBLIC_URL`, mặc định trống | Địa chỉ công khai để tạo Return URL; trống thì lấy theo request |
 | `server.tomcat.threads.max` / `max-connections` / `accept-count` | `200` / `2000` / `100` | |
