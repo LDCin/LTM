@@ -867,6 +867,66 @@ async function testServiceCalls() {
   [cashierWs, custWs].forEach((s) => s.client.disconnect());
 }
 
+async function testVoidItems() {
+  const table = ctx.tables[6];
+  const tok = table.qrToken;
+  await call('POST', `/api/cashier/tables/${table.id}/checkout`, { token: ctx.thungan, body: { reason: 'OTHER', refundReturned: true } });
+  const join = (await call('POST', `/api/public/tables/${tok}/join`, { tableToken: tok })).data;
+  const session = { 'X-Session-Id': String(join.sessionId) };
+  const order = (await call('POST', '/api/orders', {
+    tableToken: tok,
+    headers: { ...session, 'Idempotency-Key': randomKey() },
+    body: { items: [{ menuItemId: ctx.pho.id, quantity: 3 }] },
+  })).data;
+  const item = order.items[0];
+
+  const kitchenWs = await stomp({ Authorization: `Bearer ${ctx.bep}` });
+  const kitchenMsgs = collect(kitchenWs, '/topic/kitchen');
+  const custWs = await stomp({ tableToken: tok });
+  const custMsgs = collect(custWs, `/topic/table.${table.id}`);
+  await sleep(300);
+
+  const early = await call('POST', `/api/kitchen/order-items/${item.id}/void`, { token: ctx.bep, body: { quantity: 1, reason: 'OUT_OF_STOCK', version: 0 } });
+  check('Huỷ món chưa nhận qua API huỷ -> 409 (dùng Từ chối)', early.status === 409 && early.data.error === 'INVALID_STATE_TRANSITION', early.data);
+  await call('PATCH', `/api/kitchen/order-items/${item.id}/status`, { token: ctx.bep, body: { status: 'ACCEPTED', version: 0 } });
+  const byCustomer = await call('POST', `/api/kitchen/order-items/${item.id}/void`, { tableToken: tok, headers: session, body: { quantity: 1, reason: 'OTHER', note: 'x', version: 1 } });
+  check('Khách gọi API huỷ của bếp -> 401', byCustomer.status === 401, byCustomer.status);
+  const noNote = await call('POST', `/api/kitchen/order-items/${item.id}/void`, { token: ctx.bep, body: { quantity: 1, reason: 'OTHER', version: 1 } });
+  check('Lý do khác mà không ghi chú -> 400', noNote.status === 400, noNote.data);
+
+  const racers = await Promise.all([0, 1].map(() => call('POST', `/api/kitchen/order-items/${item.id}/void`, {
+    token: ctx.bep, body: { quantity: 1, reason: 'OUT_OF_STOCK', version: 1 },
+  })));
+  check('Hai máy bếp cùng huỷ 1 suất -> đúng 1 thành công, 1 nhận 409',
+    racers.filter((r) => r.status === 200).length === 1 && racers.filter((r) => r.status === 409).length === 1, racers.map((r) => r.status));
+  const ok = racers.find((r) => r.status === 200).data;
+  check('Huỷ 1 trong 3 suất -> dòng còn 2 suất, phần huỷ thành dòng riêng kèm lý do',
+    ok.items.length === 2 && ok.items[0].quantity === 2 && ok.items[1].status === 'CANCELLED' && ok.items[1].cancelReason === 'OUT_OF_STOCK', ok.items);
+  check('Tổng đơn chỉ còn tính 2 suất', ok.total === ctx.pho.price * 2, ok.total);
+  await waitFor(() => kitchenMsgs.some((m) => m.type === 'ORDER_UPDATED') && custMsgs.some((m) => m.type === 'ORDER_UPDATED'), 3000);
+  check('Bếp (kèm seq) và điện thoại khách nhận ORDER_UPDATED',
+    kitchenMsgs.some((m) => m.type === 'ORDER_UPDATED' && m.seq > 0) && custMsgs.some((m) => m.type === 'ORDER_UPDATED' && m.payload.change.reason === 'OUT_OF_STOCK'));
+
+  // Phục vụ xong, khách trả tiền, rồi trả lại 1 suất -> thu ngân phải trả lại tiền dư
+  let v = ok.items[0].version;
+  for (const s of ['COOKING', 'READY', 'SERVED']) {
+    await call('PATCH', `/api/kitchen/order-items/${item.id}/status`, { token: ctx.bep, body: { status: s, version: v++ } });
+  }
+  const served = (await call('GET', '/api/kitchen/served-orders', { token: ctx.bep })).data;
+  check('Danh sách món đã phục vụ có đơn của bàn', served.some((o) => o.id === order.id), served.length);
+  const pay = (await call('POST', `/api/cashier/tables/${table.id}/payments`, { token: ctx.thungan })).data;
+  await call('PATCH', `/api/cashier/payments/${pay.id}/confirm`, { token: ctx.thungan, body: { version: pay.version } });
+  const returned = await call('POST', `/api/kitchen/order-items/${item.id}/void`, { token: ctx.bep, body: { quantity: 1, reason: 'RETURNED', note: 'nguội', version: v } });
+  check('Khách trả lại món đã phục vụ -> 200', returned.status === 200, returned.data);
+  const tile = (await call('GET', `/api/cashier/tables/${table.id}`, { token: ctx.thungan })).data.table;
+  check('Thu ngân thấy REFUND_DUE và số tiền cần trả lại', tile.state === 'REFUND_DUE' && tile.refundDue === ctx.pho.price, tile);
+  const need = await call('POST', `/api/cashier/tables/${table.id}/checkout`, { token: ctx.thungan, body: {} });
+  check('Trả bàn khi chưa xác nhận trả lại tiền -> 409 CONFIRM_REQUIRED', need.status === 409 && need.data.details.refundDue === ctx.pho.price, need.data);
+  const done = await call('POST', `/api/cashier/tables/${table.id}/checkout`, { token: ctx.thungan, body: { refundReturned: true } });
+  check('Xác nhận đã trả lại tiền -> trả bàn được', done.status === 200 && done.data.state === 'EMPTY', done.data);
+  [kitchenWs, custWs].forEach((s) => s.client.disconnect());
+}
+
 // ================================================================== chạy
 
 (async () => {
@@ -894,6 +954,7 @@ async function testServiceCalls() {
   await section('15. Phiên bàn: nhiều điện thoại, đơn chung, tên khách, trả bàn', testSharedSessionAndNames);
   await section('16. Thanh toán và quầy thu ngân', testPaymentsAndCashier);
   await section('17. Gọi phục vụ', testServiceCalls);
+  await section('18. Bếp huỷ / khách trả lại món đã nhận', testVoidItems);
   await teardown().catch((e) => console.error('Dọn dẹp lỗi:', e.message));
 
   console.log(`\n================ KẾT QUẢ: ${passed} đạt, ${failures.length} lỗi ================`);

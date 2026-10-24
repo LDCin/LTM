@@ -3,13 +3,14 @@ import ConnectionBadge from '../components/ConnectionBadge.jsx';
 import Login from '../components/Login.jsx';
 import { ApiError, getStaffSession, request, setStaffSession, wsUrl } from '../lib/api.js';
 import { RealtimeConnection } from '../lib/connection.js';
-import { ITEM_STATUS, formatVnd, minutesSince } from '../lib/format.js';
+import { ITEM_STATUS, VOID_REASON, formatVnd, minutesSince } from '../lib/format.js';
 
 const STATE_LABEL = {
   EMPTY: 'Trống',
   DINING: 'Đang ăn',
   AWAITING_PAYMENT: 'Chờ thanh toán',
   PAID: 'Đã thanh toán',
+  REFUND_DUE: 'Cần trả lại tiền',
   OUT_OF_SERVICE: 'Ngừng phục vụ',
 };
 const METHOD_LABEL = { CASH: 'Tiền mặt', VNPAY: 'VNPay' };
@@ -165,26 +166,40 @@ function CashierBoard({ session, onLogout }) {
     }
   }
 
+  // Trả bàn: server có thể hỏi xác nhận (409 CONFIRM_REQUIRED) -> hỏi thu ngân rồi gửi lại kèm câu trả lời.
+  // Hai loại xác nhận: đã trả lại tiền dư cho khách (details.refundDue), lý do khi còn nợ / còn món.
   async function checkout(t) {
+    const body = {};
     try {
-      await api('POST', `/api/cashier/tables/${t.id}/checkout`, {});
+      for (;;) {
+        try {
+          await api('POST', `/api/cashier/tables/${t.id}/checkout`, body);
+          break;
+        } catch (e) {
+          if (e.code !== 'CONFIRM_REQUIRED') throw e;
+          if (e.details?.refundDue > 0 && !body.refundReturned) {
+            if (!window.confirm(`${e.message}\n\nĐã trả lại khách ${formatVnd(e.details.refundDue)}?`)) return;
+            body.refundReturned = true;
+          } else if (!body.reason) {
+            const choice = window.prompt(
+              `${e.message}\n\nNhập số lý do:\n${REASONS.map(([, label], i) => `${i + 1}. ${label}`).join('\n')}`,
+              '1',
+            );
+            const reason = REASONS[Number(choice) - 1];
+            if (!reason) return;
+            body.reason = reason[0];
+            body.note = reason[0] === 'OTHER' ? window.prompt('Ghi chú lý do:') || '' : '';
+          } else {
+            throw e;
+          }
+        }
+      }
       setToast(`Đã trả bàn ${t.code}`);
       setSelected(null);
       await loadTables();
     } catch (e) {
-      if (e.code === 'CONFIRM_REQUIRED') {
-        const choice = window.prompt(
-          `${e.message}\n\nNhập số lý do:\n${REASONS.map(([, label], i) => `${i + 1}. ${label}`).join('\n')}`,
-          '1',
-        );
-        const reason = REASONS[Number(choice) - 1];
-        if (!reason) return;
-        const note = reason[0] === 'OTHER' ? window.prompt('Ghi chú lý do:') || '' : '';
-        await act(() => api('POST', `/api/cashier/tables/${t.id}/checkout`, { reason: reason[0], note }), `Đã trả bàn ${t.code}`);
-        setSelected(null);
-      } else {
-        setToast(e.message);
-      }
+      setToast(e.message);
+      loadTables().catch(() => {});
     }
   }
 
@@ -246,6 +261,7 @@ function CashierBoard({ session, onLogout }) {
                     {METHOD_LABEL[t.pending.method]}: <strong>{formatVnd(t.pending.amount)}</strong>
                   </span>
                 )}
+                {t.refundDue > 0 && <span className="refund">↩ Trả lại khách {formatVnd(t.refundDue)}</span>}
                 {t.needsRefund && <span className="refund">⚠ Cần hoàn tiền</span>}
               </>
             )}
@@ -317,7 +333,16 @@ function TableDetail({ detail, onClose, onCreateCash, onConfirm, onCancelPayment
                     {o.items.map((i) => (
                       <div key={i.id}>
                         {i.quantity}× {i.name}{' '}
-                        <span className={`chip chip-${ITEM_STATUS[i.status]?.tone}`}>{ITEM_STATUS[i.status]?.short}</span>
+                        <span className={`chip chip-${ITEM_STATUS[i.status]?.tone}`}>
+                          {i.cancelReason === 'RETURNED' ? 'Trả lại' : ITEM_STATUS[i.status]?.short}
+                        </span>
+                        {i.cancelReason && (
+                          <span className="hint">
+                            {' '}
+                            {VOID_REASON[i.cancelReason]}
+                            {i.cancelNote ? `: ${i.cancelNote}` : ''} ({i.cancelledBy})
+                          </span>
+                        )}
                       </div>
                     ))}
                   </td>
@@ -337,10 +362,16 @@ function TableDetail({ detail, onClose, onCreateCash, onConfirm, onCancelPayment
               <span>{formatVnd(bill.paid)}</span>
             </div>
             <div className="order-line total-line">
-              <span>{bill.remaining < 0 ? 'Trả thừa' : 'Còn phải trả'}</span>
+              <span>{bill.remaining < 0 ? 'Cần trả lại khách' : 'Còn phải trả'}</span>
               <strong>{formatVnd(Math.abs(bill.remaining))}</strong>
             </div>
           </div>
+          {bill.remaining < 0 && (
+            <div className="banner warn">
+              Khách đã trả dư {formatVnd(-bill.remaining)} (có món bị huỷ / trả lại sau khi thanh toán). Trả lại tiền cho khách
+              trước khi bấm Trả bàn.
+            </div>
+          )}
 
           {pending ? (
             <div className="banner warn pay-banner">

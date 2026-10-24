@@ -81,6 +81,9 @@ CREATE TABLE IF NOT EXISTS order_item (
     version      INT          NOT NULL DEFAULT 0,   -- optimistic locking
     station      VARCHAR(20)  NOT NULL,
     updated_at   BIGINT       NOT NULL,
+    cancel_reason VARCHAR(20) NULL,          -- bếp huỷ / khách trả lại sau khi bếp đã nhận: lý do
+    cancel_note  VARCHAR(200) NULL,
+    cancelled_by VARCHAR(50)  NULL,
     INDEX idx_item_order (order_id),
     FOREIGN KEY (order_id) REFERENCES orders (id),
     FOREIGN KEY (menu_item_id) REFERENCES menu_item (id)

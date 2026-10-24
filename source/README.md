@@ -107,14 +107,14 @@ cd source/server
 mvn test
 ```
 
-22 test, gồm: token bucket; state machine; và test tích hợp qua HTTP thật (đặt trùng cùng key, **8 request song song
+24 test, gồm: token bucket; state machine; và test tích hợp qua HTTP thật (đặt trùng cùng key, **8 request song song
 cùng key chỉ tạo 1 đơn**, cùng key khác nội dung → 409, request sai → 400, mã QR sai → 401, sai version → 409,
 bếp chưa đăng nhập → 401, ETag → 304, **8 máy vào bàn trống cùng lúc chỉ mở 1 phiên**, đơn chung trong phiên + chỉ
 máy đặt mới huỷ được, máy của lượt cũ bị chặn sau khi trả bàn, admin không đóng được bàn có khách, thanh toán tiền
 mặt + thu ngân xác nhận + trả bàn, **IPN VNPay: sai chữ ký → 97, sai số tiền → 04, gọi lặp → 02**, phiên bỏ trống tự
 kết thúc).
 
-Kiểm thử end-to-end trên server đang chạy (193 ca trong 17 nhóm, khoảng 40 giây): REST, phân quyền, xử lý lỗi, idempotency,
+Kiểm thử end-to-end trên server đang chạy (205 ca trong 18 nhóm, khoảng 40 giây): REST, phân quyền, xử lý lỗi, idempotency,
 WebSocket (sự kiện, ACK, RESUME, phân quyền SUBSCRIBE/SEND, giới hạn 8 kết nối/bàn, frame hỏng/quá cỡ,
 time-to-first-message), state machine, optimistic lock, huỷ đơn, tồn kho, bàn (vào bàn, ngừng/phục vụ lại), thực đơn,
 các chế độ baseline, rate limit, giao đơn tin cậy khi bếp mất mạng, phiên bàn nhiều điện thoại, thanh toán và thu ngân.
@@ -219,10 +219,12 @@ REST (JSON, lỗi dạng `{"error","message","details","timestamp"}`):
 | GET | `/api/kitchen/orders` | Ảnh chụp ban đầu + `latestSeq` |
 | GET | `/api/kitchen/events?afterSeq=` | Dùng cho POLLING |
 | PATCH | `/api/kitchen/order-items/{id}/status` | `{status, version}` |
+| POST | `/api/kitchen/order-items/{id}/void` | Bếp huỷ / ghi nhận khách trả lại món đã nhận `{quantity, reason, note, version}`; huỷ một phần thì tách dòng; trả về cả đơn |
+| GET | `/api/kitchen/served-orders` | Món đã phục vụ của các bàn đang có khách (chọn món khách trả lại) |
 | GET | `/api/cashier/tables[/{id}]` | Sơ đồ bàn / chi tiết hóa đơn (CASHIER, ADMIN) |
 | POST | `/api/cashier/tables/{id}/payments` | Thu ngân tạo lần thu tiền mặt tại quầy |
 | PATCH | `/api/cashier/payments/{id}/confirm` | `{version}`: "Đã nhận tiền" (khoá lạc quan) |
-| POST | `/api/cashier/tables/{id}/checkout` | **Trả bàn** `{reason, note}`; `409 CONFIRM_REQUIRED` nếu còn nợ/còn món mà chưa có lý do |
+| POST | `/api/cashier/tables/{id}/checkout` | **Trả bàn** `{reason, note, refundReturned}`; `409 CONFIRM_REQUIRED` nếu còn nợ/còn món mà chưa có lý do, hoặc còn tiền dư chưa trả lại khách |
 | GET | `/api/cashier/service-calls` | Các lượt khách gọi phục vụ đang chờ (cũ nhất trước) |
 | POST | `/api/cashier/service-calls/{id}/handle` | "Đã xử lý" lượt gọi (bấm lặp không lỗi) |
 | * | `/api/admin/...` | Bàn (mở/đóng = phục vụ/ngừng phục vụ), thực đơn, lịch sử thanh toán, giám sát, cấu hình |
@@ -232,7 +234,7 @@ WebSocket `ws://host/ws` (STOMP 1.2):
 | Hướng | Destination | Nội dung |
 |---|---|---|
 | Client → Server | `CONNECT` | `Authorization: Bearer <token>` (bếp) hoặc `tableToken: <qrToken>` (khách) |
-| Server → Bếp | `/topic/kitchen` | `{type, seq, eventId, serverTime, payload}`: ORDER_CREATED, ITEM_STATUS_CHANGED, ORDER_CANCELLED |
+| Server → Bếp | `/topic/kitchen` | `{type, seq, eventId, serverTime, payload}`: ORDER_CREATED, ITEM_STATUS_CHANGED, ORDER_CANCELLED, ORDER_UPDATED (bếp huỷ / khách trả lại món: cả đơn mới nhất) |
 | Server → Khách | `/topic/table.{id}` | Đơn chung của phiên (như trên, không lộ mã thiết bị), PAYMENT_UPDATED, SERVICE_CALL_UPDATED, TABLE_SESSION_ENDED, TABLE_CLOSED |
 | Server → Thu ngân | `/topic/cashier` | TABLE_STATE_CHANGED, PAYMENT_UPDATED, SERVICE_CALL_UPDATED (chỉ CASHIER, ADMIN) |
 | Server → Tất cả | `/topic/menu` | MENU_UPDATED |

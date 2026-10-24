@@ -109,9 +109,23 @@ Có hai cách làm "mất mạng":
 
 ---
 
-## 7. Test tự động
+## 7. Bếp huỷ / khách trả lại món đã nhận
+
+Chỉ màn hình bếp có nút này. Món chưa nhận vẫn dùng **Từ chối** như cũ.
+
+| # | Tình huống | Kết quả đúng | Kết quả |
+|---|---|---|---|
+| 54 | Khách đặt 3× Phở. Bếp **Nhận** → bấm **Huỷ** ở món → chọn 1 suất, lý do **Hết nguyên liệu** | Bếp còn 2× Phở; khách thấy thêm dòng "1× Phở · Hết nguyên liệu · Đã huỷ", tạm tính giảm 1 suất; tồn kho món được cộng lại 1 (món chưa nấu) | |
+| 55 | Chọn **Lý do khác** mà không ghi chú | Nút Huỷ bị khoá cho tới khi nhập ghi chú | |
+| 56 | Món đã **Đã phục vụ**: bếp bấm **🍽 Món đã phục vụ** → **Khách trả lại** | Món đó có trong danh sách; sau khi ghi nhận, khách thấy "Đã trả lại", không tính tiền | |
+| 57 | Bàn đã thanh toán đủ, rồi bếp ghi nhận khách trả lại 1 món | Thu ngân thấy bàn "Cần trả lại tiền" kèm số tiền; bấm **Trả bàn** thì phải xác nhận đã trả lại khách mới trả bàn được | |
+| 58 | Bàn đang chờ thanh toán (đã bấm Thanh toán), bếp bấm **Huỷ** một món | Báo bàn đang thanh toán, phải huỷ lần thanh toán chờ trước | |
+
+---
+
+## 8. Test tự động
 
 | Lệnh | Kỳ vọng |
 |---|---|
-| `cd source/server` → `mvn test` | `Tests run: 22, Failures: 0, Errors: 0` |
-| Server đang chạy → `cd source/loadtest` → `npm run e2e` | `KẾT QUẢ: 193 đạt, 0 lỗi` (17 nhóm) |
+| `cd source/server` → `mvn test` | `Tests run: 24, Failures: 0, Errors: 0` |
+| Server đang chạy → `cd source/loadtest` → `npm run e2e` | `KẾT QUẢ: 205 đạt, 0 lỗi` (18 nhóm) |
