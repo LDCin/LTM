@@ -169,7 +169,7 @@ Hệ thống của nhóm không dùng broker bền vững bên ngoài; thay vào
 
 ### 3.5. Yêu cầu hệ thống
 
-**Chức năng**: quét QR → vào phiên bàn (nhập tên, có thể bỏ qua) → xem thực đơn → đặt món → theo dõi trạng thái đơn chung của bàn → thanh toán (tiền mặt hoặc VNPay); bếp xem hàng đợi món, đổi trạng thái; thu ngân xem sơ đồ bàn, xác nhận tiền mặt, trả bàn; quản trị bàn (phục vụ/ngừng phục vụ), mã QR, thực đơn, lịch sử thanh toán, xem giám sát kết nối và đổi cấu hình thực nghiệm.
+**Chức năng**: quét QR → vào phiên bàn (nhập tên, có thể bỏ qua) → xem thực đơn → đặt món → theo dõi trạng thái đơn chung của bàn → thanh toán (tiền mặt hoặc VNPay); bếp xem hàng đợi món, đổi trạng thái; thu ngân xem sơ đồ bàn, xác nhận tiền mặt, trả bàn; quản trị bàn (phục vụ/ngừng phục vụ), mã QR, thực đơn, lịch sử thanh toán và đổi cấu hình thực nghiệm.
 
 **Tính chất cần bảo đảm** (dùng làm tiêu chí đánh giá):
 
@@ -232,7 +232,7 @@ nhận REPLAY_BATCH {events, latestSeq, hasMore}:
     watermark ← max(watermark, latestSeq)                  # bỏ qua "lỗ" do rollback
 ```
 
-**Phía máy chủ** (`KitchenWsController`): `/app/resume` đọc `SELECT … FROM order_event WHERE seq > ? ORDER BY seq LIMIT 500` và trả về riêng phiên đó qua `/user/queue/replay` một `REPLAY_BATCH` gồm `fromSeq`, `latestSeq`, `hasMore` và danh sách sự kiện. `/app/ack` cập nhật `lastAckSeq` của phiên trong `SessionRegistry`, dùng cho trang giám sát.
+**Phía máy chủ** (`KitchenWsController`): `/app/resume` đọc `SELECT … FROM order_event WHERE seq > ? ORDER BY seq LIMIT 500` và trả về riêng phiên đó qua `/user/queue/replay` một `REPLAY_BATCH` gồm `fromSeq`, `latestSeq`, `hasMore` và danh sách sự kiện. `/app/ack` cập nhật `lastAckSeq` của phiên trong `SessionRegistry`, dùng cho API giám sát `/api/admin/monitor`.
 
 **"Lỗ" seq**. Giá trị AUTO_INCREMENT đã cấp cho một giao dịch bị rollback không được dùng lại [22], nên dãy `seq` có thể có khoảng trống vĩnh viễn. Nếu client chờ mãi những `seq` đó, watermark sẽ đứng yên và client sẽ RESUME liên tục. Vì máy chủ trả về `latestSeq` đọc tại thời điểm phát bù, mọi `seq ≤ latestSeq` không có trong lô phát bù được coi là không tồn tại, và watermark được đẩy lên `latestSeq`.
 
@@ -403,7 +403,7 @@ Client gộp `order` vào bản đang có theo từng món: món nào có `versi
 | Ứng dụng khách | Mở từ QR, vào phiên bàn, hỏi tên (nhớ theo phiên); xem thực đơn (có ETag); đặt món kèm Idempotency-Key, giữ đơn chưa gửi được trong `localStorage`; nhận **đơn chung** của bàn (nhãn "BẠN ĐẶT" cho đơn của máy mình); thanh toán tiền mặt hoặc VNPay; khi kết nối lại thì tải lại đơn và hóa đơn qua REST |
 | Trang thu ngân | Đăng nhập (vai trò CASHIER); sơ đồ bàn (Trống / Đang ăn / Chờ thanh toán / Đã thanh toán / Ngừng phục vụ) từ `GET /api/cashier/tables`, cập nhật qua `/topic/cashier`; "Đã nhận tiền", thu tiền mặt tại quầy, "Trả bàn"; cảnh báo lần cần hoàn tiền |
 | Màn hình bếp | Đăng nhập; tải ảnh chụp đơn đang mở; nhận sự kiện theo một trong ba chế độ; đổi trạng thái món kèm `version`; có nút "Giả lập mất mạng 5s" để trình diễn |
-| Ứng dụng quản trị | Quản lý bàn (phục vụ / ngừng phục vụ), mã QR (sinh ở frontend bằng `qrcode.react`), thực đơn; xem lịch sử thanh toán; giám sát kết nối và lag ACK; đổi cấu hình thực nghiệm |
+| Ứng dụng quản trị | Quản lý bàn (phục vụ / ngừng phục vụ), mã QR (sinh ở frontend bằng `qrcode.react`), thực đơn; xem lịch sử thanh toán; đổi cấu hình thực nghiệm. Số liệu giám sát (kết nối, ACK seq, bộ đếm) chỉ có qua API `/api/admin/monitor` cho bộ đo thực nghiệm, không hiện trên giao diện |
 | Tầng REST | Xác thực (`X-Table-Token` cho khách, `Authorization: Bearer` cho nhân viên), rate limit, kiểm tra dữ liệu, ánh xạ lỗi thống nhất |
 | Tầng WebSocket | Handshake, xác thực và phân quyền từng frame STOMP, heart-beat, ACK/RESUME, giới hạn kết nối, backpressure |
 | Dịch vụ nghiệp vụ | `OrderService` (đặt, đổi trạng thái, huỷ), `TableService` (vào bàn, kết thúc phiên), `PaymentService` (hóa đơn, tạo/huỷ/xác nhận thanh toán, xử lý kết quả VNPay), `CashierService` (sơ đồ bàn, trả bàn, tác vụ định kỳ), `VnpayGateway`, `MenuService`, `AuthService` |
@@ -659,7 +659,7 @@ source/
 * **`WebSocketConfig`**: endpoint `/ws`; simple broker cho `/topic`, `/queue` với heart-beat 10 s; tiền tố `/app`, `/user`; giới hạn transport; pool cho inbound/outbound channel.
 * **`StompAuthInterceptor`**: một `ChannelInterceptor` trên inbound channel, xử lý `CONNECT`/`SUBSCRIBE`/`SEND` như mục 6.2.
 * **`KitchenWsController`**: `@MessageMapping("/ack")`, `@MessageMapping("/resume")` + `@SendToUser("/queue/replay", broadcast = false)` để chỉ gửi về đúng phiên yêu cầu.
-* **`SessionRegistry`**: danh sách phiên WebSocket và số kết nối mỗi bàn, phục vụ giới hạn kết nối và trang giám sát.
+* **`SessionRegistry`**: danh sách phiên WebSocket và số kết nối mỗi bàn, phục vụ giới hạn kết nối và API giám sát `/api/admin/monitor` (bộ đo thực nghiệm dùng).
 * **`TokenBucket` / `RateLimiter` / `RateLimitInterceptor`**: thuật toán token bucket nạp liên tục theo thời gian thực (`tokens = min(capacity, tokens + Δt × rate)`), trả về số mili-giây cần chờ để điền `Retry-After`; interceptor chạy trước controller nên request bị từ chối không chạm tới DB.
 * **`AuthService`**: token = `base64url(id:username:role:expiry) + "." + base64url(HMAC-SHA256)`, so sánh chữ ký bằng `MessageDigest.isEqual` (thời gian hằng định); mật khẩu lưu bằng BCrypt.
 * **`MenuService`**: cache thực đơn trong RAM theo số phiên bản `AtomicLong`; số phiên bản cũng là ETag; khi thực đơn thay đổi, phát `MENU_UPDATED`.

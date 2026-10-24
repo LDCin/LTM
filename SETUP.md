@@ -395,7 +395,7 @@ Với MySQL Workbench: bấm Refresh ở khung **Schemas** sẽ thấy database 
 | Trang | Địa chỉ | Tài khoản |
 |---|---|---|
 | Trang chủ | http://localhost:8080 | – |
-| Quản trị (bàn, QR, thực đơn, giám sát, cấu hình thực nghiệm) | http://localhost:8080/admin | `admin` / `admin123` |
+| Quản trị (bàn, QR, thực đơn, lịch sử thanh toán, cấu hình thực nghiệm) | http://localhost:8080/admin | `admin` / `admin123` |
 | Màn hình bếp | http://localhost:8080/kitchen | `bep` / `bep123` |
 | Thu ngân (sơ đồ bàn, thanh toán, trả bàn) | http://localhost:8080/cashier | `thungan` / `thungan123` |
 | Khách gọi món | Ở trang Quản trị → **Bàn & QR** → bấm "Mở link gọi món" của một bàn (hoặc quét QR) | – |
