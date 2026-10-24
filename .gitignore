@@ -1,6 +1,5 @@
 node_modules/
 target/
-source/server/src/main/resources/static/
 *.log
 .idea/
 .vscode/
