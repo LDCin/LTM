@@ -3,7 +3,7 @@
 Có 3 mức test, nên làm theo thứ tự:
 
 1. **Test tay trên trình duyệt** (khoảng 15 phút): hiểu hệ thống chạy thế nào, dùng để tập demo.
-2. **Test tự động** (khoảng 1 phút): `mvn test` (24 ca) và `npm run e2e` (18 nhóm).
+2. **Test tự động** (khoảng 1 phút): `mvn test` (29 ca) và `npm run e2e` (19 nhóm).
 3. **Thực nghiệm đo hiệu năng** (khoảng 15 phút): lấy số liệu cho báo cáo.
 
 ---
@@ -98,10 +98,11 @@ Mọi điện thoại trong cùng phiên thấy **đơn chung** của bàn; ch�
 | 20 | Khách bấm **Đặt món** khi tắt server (Ctrl+C), đợi ~5 giây, bật lại server, bấm **Gửi lại** | Hiện banner "Có đơn chưa gửi được"; sau khi Gửi lại chỉ tạo **1** đơn (với H2, tắt server sẽ mất dữ liệu; nên thử bước này với MySQL) |
 | 21 | Khách bấm **🙋 Gọi phục vụ** (thử bấm trên cả 2 máy cùng bàn); thu ngân bấm **Đã xử lý** | Thu ngân kêu "ting", khung đỏ "Khách gọi phục vụ" chỉ có **1** dòng cho bàn, ô bàn nhấp nháy. Sau "Đã xử lý": khung biến mất, cả 2 máy hiện "Nhân viên đã nhận yêu cầu..." và nút trở lại bình thường |
 | 22 | Khách đặt 3× một món; bếp **Nhận** rồi bấm **Huỷ**, chọn 1 suất, lý do **Hết nguyên liệu**. Phục vụ món còn lại, khách trả tiền; bếp bấm **🍽 Món đã phục vụ** → **Khách trả lại** 1 suất; thu ngân bấm **Trả bàn** | Khách thấy dòng huỷ kèm lý do và tạm tính giảm ngay. Sau khi trả lại: thu ngân thấy bàn "Cần trả lại tiền" kèm số tiền, và phải xác nhận đã trả lại khách mới trả bàn được |
+| 23 | Khách bấm **💬 Gợi ý món**, gõ "Gợi ý đồ uống", rồi bấm **Thêm vào giỏ** ở một gợi ý | Trợ lý trả lời kèm thẻ món đồ uống, giá đúng thực đơn; giỏ hàng tăng đúng món đó. Không có `GEMINI_API_KEY` thì có dòng "Trợ lý AI chưa được bật" (gợi ý dự phòng) |
 
 Thanh toán **VNPay** sandbox cần mã merchant (biến môi trường `VNPAY_TMN_CODE`, `VNPAY_HASH_SECRET`) và chạy qua
 tunnel; thiếu cấu hình thì trang khách chỉ hiện "Tiền mặt". Cách cấu hình ở `SETUP.md` mục 12.7, các ca thử ở
-`TEST_CASES.md` (ca 32, 33). Danh sách ca test tay đầy đủ hơn (58 ca, gồm các tình huống mất mạng, gọi phục vụ và huỷ / trả lại món) nằm trong `TEST_CASES.md`.
+`TEST_CASES.md` (ca 32, 33). Danh sách ca test tay đầy đủ hơn (62 ca, gồm các tình huống mất mạng, gọi phục vụ, huỷ / trả lại món và trợ lý gợi ý món) nằm trong `TEST_CASES.md`.
 
 ### Xem gói tin thật (rất nên làm trước khi bảo vệ)
 
@@ -122,7 +123,7 @@ cd source/server
 mvn test
 ```
 
-Kết quả đúng: `Tests run: 24, Failures: 0, Errors: 0`.
+Kết quả đúng: `Tests run: 29, Failures: 0, Errors: 0`.
 
 ### End-to-end (server phải đang chạy)
 
@@ -131,7 +132,7 @@ cd source/loadtest
 npm run e2e
 ```
 
-Kết quả đúng: `KẾT QUẢ: … đạt, 0 lỗi` (17 nhóm, nhóm 15 là phiên bàn nhiều điện thoại, nhóm 16 là thanh toán và thu ngân, nhóm 17 là gọi phục vụ, nhóm 18 là bếp huỷ / khách trả lại món). Mỗi dòng ✔ là một tính năng đã được kiểm chứng qua mạng thật;
+Kết quả đúng: `KẾT QUẢ: … đạt, 0 lỗi` (17 nhóm, nhóm 15 là phiên bàn nhiều điện thoại, nhóm 16 là thanh toán và thu ngân, nhóm 17 là gọi phục vụ, nhóm 18 là bếp huỷ / khách trả lại món, nhóm 19 là trợ lý gợi ý món). Mỗi dòng ✔ là một tính năng đã được kiểm chứng qua mạng thật;
 dòng ✘ cho biết tính năng nào hỏng kèm dữ liệu thực tế. Bộ test dùng các bàn riêng mã `LTE...` và tự khôi phục
 cấu hình khi chạy xong, nên chạy lại bao nhiêu lần cũng được.
 

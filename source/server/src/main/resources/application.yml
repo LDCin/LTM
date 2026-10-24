@@ -69,6 +69,15 @@ app:
     api-url: ${VNPAY_API_URL:https://sandbox.vnpayment.vn/merchant_webapi/api/transaction}
     # Địa chỉ công khai (VD https://xxx.ngrok-free.dev) để tạo Return URL; để trống thì lấy theo request
     public-url: ${APP_PUBLIC_URL:}
+  assistant:
+    # Trợ lý gợi ý món: khoá Gemini API (Google AI Studio, hạng miễn phí). Trống thì chỉ dùng gợi ý dự phòng.
+    gemini-api-key: ${GEMINI_API_KEY:}
+    gemini-model: ${GEMINI_MODEL:gemini-flash-latest}
+    timeout-ms: 15000
+    per-table-capacity: 5            # mỗi bàn hỏi tối đa 5 câu liên tiếp...
+    per-table-refill-per-minute: 6   # ...hồi 6 câu mỗi phút (hạng free của Gemini giới hạn số request/phút)
+    cooldown-seconds: 60             # Gemini báo hết lượt (429) hoặc lỗi liên tiếp -> ngừng gọi 60 s, dùng gợi ý dự phòng
+    failure-threshold: 3
 
 logging:
   level:

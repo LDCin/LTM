@@ -12,6 +12,7 @@
     "e4": "node experiment.js e4",
     "e5": "node experiment.js e5",
     "e6": "node experiment.js e6",
+    "e7": "node assistant-eval.js",
     "all": "node run-all.js",
     "report": "node report.js"
   },

@@ -927,6 +927,41 @@ async function testVoidItems() {
   [kitchenWs, custWs].forEach((s) => s.client.disconnect());
 }
 
+async function testAssistant() {
+  const table = ctx.tables[5];
+  const tok = table.qrToken;
+  await call('POST', `/api/cashier/tables/${table.id}/checkout`, { token: ctx.thungan, body: { reason: 'OTHER', refundReturned: true } });
+  const join = (await call('POST', `/api/public/tables/${tok}/join`, { tableToken: tok })).data;
+  const session = { 'X-Session-Id': String(join.sessionId) };
+  const ask = (text, extra = {}) => call('POST', '/api/assistant/chat', {
+    tableToken: tok,
+    headers: { ...session, ...extra },
+    body: { messages: [{ role: 'bot', text: 'Chào bạn' }, { role: 'user', text }] },
+  });
+
+  const cfg = (await call('GET', '/api/public/config')).data;
+  check('Cấu hình công khai cho biết trợ lý có dùng AI không', typeof cfg.assistantAi === 'boolean', cfg.assistantAi);
+  const r = await ask('Gợi ý đồ uống giúp mình');
+  check('Hỏi trợ lý -> 200, có câu trả lời và nguồn AI/FALLBACK', r.status === 200 && r.data.reply && ['AI', 'FALLBACK'].includes(r.data.source), r.data);
+  const menuItems = new Map(ctx.items.map((i) => [i.id, i]));
+  check('Mọi gợi ý là món có thật, giá đúng thực đơn của máy chủ',
+    r.data.suggestions.length > 0 && r.data.suggestions.every((s) => menuItems.get(s.menuItemId)?.price === s.price), r.data.suggestions);
+  if (!cfg.assistantAi) {
+    check('Chưa có khoá AI -> gợi ý dự phòng kèm thông báo', r.data.source === 'FALLBACK' && !!r.data.notice, r.data);
+  }
+
+  const bad = await call('POST', '/api/assistant/chat', { tableToken: tok, headers: session, body: { messages: [{ role: 'bot', text: 'x' }] } });
+  check('Tin cuối không phải của khách -> 400', bad.status === 400, bad.status);
+  const many = [];
+  for (let i = 0; i < 6; i++) many.push(await ask(`câu ${i}`));
+  check('Hỏi dồn dập trên một bàn -> bị giới hạn 429 kèm Retry-After',
+    many.some((x) => x.status === 429 && x.headers.get('retry-after')), many.map((x) => x.status));
+
+  await call('POST', `/api/cashier/tables/${table.id}/checkout`, { token: ctx.thungan, body: { reason: 'OTHER', refundReturned: true } });
+  const stale = await ask('còn món gì?');
+  check('Máy của lượt khách cũ hỏi trợ lý -> 409 SESSION_ENDED', stale.status === 409 && stale.data.error === 'SESSION_ENDED', stale.data);
+}
+
 // ================================================================== chạy
 
 (async () => {
@@ -955,6 +990,7 @@ async function testVoidItems() {
   await section('16. Thanh toán và quầy thu ngân', testPaymentsAndCashier);
   await section('17. Gọi phục vụ', testServiceCalls);
   await section('18. Bếp huỷ / khách trả lại món đã nhận', testVoidItems);
+  await section('19. Trợ lý gợi ý món', testAssistant);
   await teardown().catch((e) => console.error('Dọn dẹp lỗi:', e.message));
 
   console.log(`\n================ KẾT QUẢ: ${passed} đạt, ${failures.length} lỗi ================`);

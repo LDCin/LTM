@@ -90,3 +90,19 @@ kế.
 * Số liệu hiện tại đo bằng H2 trên một máy, chưa có MySQL và mạng thật; nếu bị hỏi thì nói thẳng, đây là hạn chế đã
   ghi trong báo cáo.
 * Thanh toán, gọi phục vụ và huỷ món mới được kiểm thử chức năng, chưa có số đo hiệu năng.
+
+---
+
+## 4. Bổ sung: trợ lý gợi ý món (điểm mới không thuần mạng)
+
+Đề bài cho phép điểm mới không chỉ về mạng ("một cách tích hợp các thành phần", "một cách sử dụng ML"). Chatbot gợi ý
+món **tự nó không mới**; điểm khác của dự án (báo cáo mục 4.12):
+
+* **Neo vào trạng thái thời gian thực**: mô hình nhận tồn kho, tải bếp, đơn chung của bàn, nên không gợi ý món đã hết,
+  tránh món bếp đang dồn khi khách cần nhanh, không gợi ý trùng món bàn đã gọi.
+* **Client bị ràng buộc**: đầu ra JSON theo lược đồ, máy chủ kiểm lại từng gợi ý (giá, tên lấy từ thực đơn), trợ lý không
+  có quyền đặt món.
+* **Phần mạng của nó**: gọi dịch vụ HTTPS bên ngoài có hạn mức thấp → giới hạn mỗi bàn, timeout, tôn trọng
+  `Retry-After` khi Gemini báo 429, circuit breaker khi lỗi liên tiếp, gợi ý dự phòng khi AI không dùng được.
+* **Bằng chứng**: E7 so "AI có ngữ cảnh thời gian thực" với "AI chỉ biết thực đơn in sẵn" trên 24 câu hỏi; **chưa chạy**
+  vì cần khoá Gemini (`GEMINI_API_KEY`).

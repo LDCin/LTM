@@ -427,7 +427,7 @@ Giải thích các khái niệm mới:
 * **Đóng bàn / Mở bàn** ở trang Quản trị = **ngừng phục vụ / phục vụ lại** (bảo trì), không liên quan tới lượt khách.
   Không đóng được bàn đang có khách.
 
-Checklist đầy đủ 22 bước nằm trong [`source/TESTING.md`](source/TESTING.md).
+Checklist đầy đủ 23 bước nằm trong [`source/TESTING.md`](source/TESTING.md).
 
 ---
 
@@ -608,6 +608,23 @@ DB_PASSWORD=...;AUTH_SECRET=...;VNPAY_TMN_CODE=<ma-website>;VNPAY_HASH_SECRET=<c
   liệu có chữ ký trên trình duyệt). Chưa khai báo được IPN với VNPay thì đường thứ hai vẫn đủ; ngoài ra server tự **tra
   cứu giao dịch** với VNPay trước khi cho một lần thanh toán hết hạn (15 phút).
 
+### 12.8. Trợ lý gợi ý món (Gemini API, miễn phí)
+
+Trang gọi món có nút **💬 Gợi ý món**: khách chat với trợ lý, trợ lý gợi ý món kèm nút **Thêm vào giỏ** (trợ lý không
+tự đặt món). Không có khoá thì trợ lý vẫn chạy bằng **gợi ý dự phòng** (theo quy tắc, không dùng AI). Muốn dùng AI:
+
+1. Vào https://aistudio.google.com, đăng nhập tài khoản Google → **Get API key** → **Create API key** (hạng miễn phí,
+   không cần gói Gemini / ChatGPT trả phí; các gói đó không dùng được cho API).
+2. Thêm vào ô **Environment variables** ở Bước 7.3: `GEMINI_API_KEY=<khoá vừa tạo>` (**không** ghi khoá vào file trong
+   dự án). Tuỳ chọn: `GEMINI_MODEL=<tên model>` nếu muốn đổi model, mặc định `gemini-flash-latest`.
+3. Chạy lại server. Máy chủ phải có Internet để gọi Gemini.
+
+* Hạng miễn phí giới hạn số request mỗi phút / mỗi ngày (xem trong AI Studio). Server tự giới hạn mỗi bàn 5 câu hỏi
+  liên tiếp, hồi 6 câu mỗi phút; Gemini báo hết lượt (429) thì server tạm dùng gợi ý dự phòng trong thời gian Gemini yêu
+  cầu chờ (mặc định 60 giây), khách vẫn nhận được gợi ý.
+* Dữ liệu gửi cho Gemini gồm thực đơn, các món bàn đã gọi và tải bếp; không gửi tên khách hay mã thiết bị. Gói miễn phí
+  có thể được Google dùng để cải thiện sản phẩm.
+
 ---
 
 ## 13. Chạy test
@@ -624,7 +641,7 @@ cd C:\Projects\LTM\source\server
 mvn test
 ```
 
-Kết quả đúng: `Tests run: 24, Failures: 0, Errors: 0`. Test chạy bằng cơ sở dữ liệu H2 riêng, không đụng tới MySQL.
+Kết quả đúng: `Tests run: 29, Failures: 0, Errors: 0`. Test chạy bằng cơ sở dữ liệu H2 riêng, không đụng tới MySQL.
 
 ### 13.2. End-to-end (server phải đang chạy ở cổng 8080)
 
@@ -633,7 +650,7 @@ cd C:\Projects\LTM\source\loadtest
 npm run e2e
 ```
 
-Kết quả đúng: `KẾT QUẢ: 205 đạt, 0 lỗi` (cần Node.js và đã chạy `npm install` ở Bước 8.3). Nếu server chạy cổng khác:
+Kết quả đúng: `KẾT QUẢ: 212 đạt, 0 lỗi` (cần Node.js và đã chạy `npm install` ở Bước 8.3). Nếu server chạy cổng khác:
 `node e2e-test.js --base=http://localhost:8081`.
 
 ---
@@ -654,6 +671,10 @@ node run-all.js
 * Bản đầy đủ mất khoảng 15 phút; bản rút gọn để thử: `node run-all.js --quick`.
 * Kết quả: `statics/results/REPORT.md` (bảng tổng hợp) và các file `.json`/`.csv` (số liệu thô).
 * Chạy riêng một kịch bản, ví dụ: `node experiment.js e2 --mode=NAIVE_PUSH --orders=600`.
+* **E7 – trợ lý gợi ý món** (chạy riêng, cần `GEMINI_API_KEY` ở Bước 12.8): `node assistant-eval.js`. Script dựng sẵn
+  các kịch bản (bếp đang dồn món, món hết hàng, bàn đã gọi sẵn), hỏi 24 câu với hai cấu hình `live` (AI có ngữ cảnh thời
+  gian thực) và `static` (AI chỉ biết thực đơn in sẵn), tự chấm các ràng buộc và ghi kết quả vào
+  `statics/results/e7_assistant_*.json`. Mỗi câu cách nhau 7 giây để không vượt hạn mức miễn phí (khoảng 6 phút).
 * Sau khi chạy, cấu hình server tự trở về mặc định. Nếu thực nghiệm bị dừng giữa chừng, chạy
   `node experiment.js cleanup`.
 

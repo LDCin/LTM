@@ -208,13 +208,14 @@ public class AdminController {
     // ------------------------------------------------------------------ cấu hình thực nghiệm
 
     public record SettingsDto(DeliveryMode deliveryMode, Boolean idempotencyEnabled, Boolean optimisticLockEnabled,
-                              Boolean rateLimitEnabled, Boolean trustForwardedFor) {
+                              Boolean rateLimitEnabled, Boolean trustForwardedFor, Boolean assistantLiveContext) {
     }
 
     @GetMapping("/settings")
     public SettingsDto settings() {
         return new SettingsDto(props.getDeliveryMode(), props.isIdempotencyEnabled(), props.isOptimisticLockEnabled(),
-                props.getRateLimit().isEnabled(), props.getRateLimit().isTrustForwardedFor());
+                props.getRateLimit().isEnabled(), props.getRateLimit().isTrustForwardedFor(),
+                props.getAssistant().isLiveContext());
     }
 
     /** Đổi chế độ lúc chạy để so sánh baseline và proposed mà không cần khởi động lại server. */
@@ -234,6 +235,9 @@ public class AdminController {
         }
         if (req.trustForwardedFor() != null) {
             props.getRateLimit().setTrustForwardedFor(req.trustForwardedFor());
+        }
+        if (req.assistantLiveContext() != null) {
+            props.getAssistant().setLiveContext(req.assistantLiveContext());
         }
         rateLimiter.clear();
         SettingsDto current = settings();

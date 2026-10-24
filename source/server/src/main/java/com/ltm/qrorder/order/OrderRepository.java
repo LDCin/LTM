@@ -216,6 +216,17 @@ public class OrderRepository {
                 "ORDER BY o.created_at DESC, o.id DESC LIMIT " + MAX_ACTIVE_ORDERS);
     }
 
+    /** Tải bếp hiện tại: số suất đang chờ hoặc đang làm (PENDING, ACCEPTED, COOKING) của từng món, trên mọi bàn. */
+    public Map<Long, Integer> kitchenQueueByMenuItem() {
+        Map<Long, Integer> m = new LinkedHashMap<>();
+        jdbc.query("SELECT menu_item_id, SUM(quantity) AS q FROM order_item " +
+                        "WHERE status IN ('PENDING', 'ACCEPTED', 'COOKING') GROUP BY menu_item_id",
+                rs -> {
+                    m.put(rs.getLong("menu_item_id"), rs.getInt("q"));
+                });
+        return m;
+    }
+
     /** Huỷ các món còn PENDING; trả về số món đã huỷ. */
     public int cancelPendingItems(long orderId, long now) {
         return jdbc.update(

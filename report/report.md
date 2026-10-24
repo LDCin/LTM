@@ -56,6 +56,7 @@ Thiết kế và hiện thực một hệ thống gọi món qua QR trong đó m
 9. Thanh toán theo bàn bằng tiền mặt hoặc VNPay sandbox: số tiền do máy chủ tính, mỗi phiên tối đa một lần thanh toán đang chờ, kết quả VNPay chỉ được ghi nhận khi có chữ ký hợp lệ và không bị ghi nhận hai lần.
 10. Khách bấm "Gọi phục vụ" là quầy lễ tân nhận thông báo ngay; nhiều điện thoại cùng bàn bấm hay bấm lặp vẫn chỉ tạo một thông báo.
 11. Bếp huỷ được món đã nhận (một phần hoặc cả dòng) hoặc ghi nhận khách trả lại món đã phục vụ, bắt buộc có lý do; món huỷ không tính tiền, và nếu bàn đã thanh toán thì quầy thu ngân thấy số tiền phải trả lại khách.
+12. Trợ lý gợi ý món bằng mô hình ngôn ngữ (Gemini API): khách chat bằng tiếng Việt, trợ lý gợi ý món dựa trên trạng thái thời gian thực của hệ thống, chỉ gợi ý chứ không tự đặt món, và vẫn hoạt động (gợi ý dự phòng) khi dịch vụ AI hết lượt hoặc lỗi.
 
 ### 1.5. Phạm vi
 
@@ -67,6 +68,7 @@ Thiết kế và hiện thực một hệ thống gọi món qua QR trong đó m
 | Đăng nhập nhân viên (bếp, thu ngân, quản trị) | Ứng dụng di động native |
 | Đơn chung của bàn, tên khách; thanh toán theo bàn: tiền mặt và VNPay **sandbox** | Giảm giá, phí phục vụ, VAT, in hóa đơn |
 | Gọi phục vụ (báo quầy lễ tân); bếp huỷ / ghi nhận khách trả lại món đã nhận | Nhân viên gọi món hộ, chuyển / gộp bàn, báo cáo doanh thu |
+| Trợ lý gợi ý món (Gemini API hạng miễn phí, có gợi ý dự phòng) | Trợ lý tự đặt món, gợi ý cá nhân hoá theo lịch sử khách |
 | Giao đơn tin cậy, idempotency, đồng bộ nhiều bếp, chống quá tải | Triển khai cloud, nhiều máy chủ |
 | Bộ công cụ thực nghiệm E1–E6 | HTTPS/WSS (chạy trong mạng LAN) |
 
@@ -305,6 +307,7 @@ Nếu số dòng bị ảnh hưởng bằng 0, có người khác đã cập nh�
 | `idempotencyEnabled` | `false` (bỏ qua header) | `true` |
 | `optimisticLockEnabled` | `false` (UPDATE không có điều kiện `version`) | `true` |
 | `rateLimitEnabled` | `false` | `true` |
+| `assistantLiveContext` | `false` (trợ lý chỉ biết thực đơn in sẵn) | `true` (ngữ cảnh thời gian thực, mục 4.12) |
 
 Lưu ý: ở `NAIVE_PUSH`, máy chủ vẫn ghi nhật ký sự kiện như bình thường; sự khác biệt nằm ở việc client không dùng `seq` để ACK, RESUME hay loại trùng. Như vậy phép so sánh E2 cô lập đúng tác dụng của phần giao thức phía client.
 
@@ -384,6 +387,23 @@ Client gộp `order` vào bản đang có theo từng món: món nào có `versi
 **Tiền.** Hóa đơn vốn đã tính bằng tổng các món không `CANCELLED` (mục 4.9), nên món huỷ tự động không tính tiền. Nếu bàn đã thanh toán đủ trước khi món bị huỷ, tổng đã trả lớn hơn tổng hóa đơn; quầy thu ngân thấy bàn ở trạng thái `REFUND_DUE` kèm `refundDue = đã trả − tổng`. "Trả bàn" khi còn `refundDue > 0` bị từ chối bằng `409 CONFIRM_REQUIRED` (kèm `details.refundDue`) cho tới khi thu ngân gửi lại với `refundReturned: true`; máy chủ ghi "Đã trả lại khách …đ" vào ghi chú kết thúc phiên. Tác vụ tự trả bàn sau khi thanh toán chỉ chạy khi số đã trả **bằng đúng** tổng hóa đơn, nên không tự đóng một bàn còn nợ tiền khách.
 
 **Món đã phục vụ.** Món `SERVED` không còn trên bảng bếp, nên màn hình bếp có thêm danh sách "Món đã phục vụ" lấy từ `GET /api/kitchen/served-orders` (các đơn có món `SERVED` của những bàn đang có khách) để bếp chọn món khách trả lại.
+
+### 4.12. Trợ lý gợi ý món dùng mô hình ngôn ngữ
+
+Khách bấm **💬 Gợi ý món** trên trang gọi món và trò chuyện bằng tiếng Việt ("2 người, khoảng 150 nghìn, không ăn cay", "món nào ra nhanh?"); trợ lý trả lời kèm các thẻ món gợi ý có nút **Thêm vào giỏ**. Bản thân chatbot gợi ý món không mới; điểm khác nằm ở hai chỗ: trợ lý được **neo vào trạng thái thời gian thực** của hệ thống, và nó là **một client bị ràng buộc** của hệ thống chứ không được tự quyết.
+
+**Ngữ cảnh thời gian thực.** Mỗi câu hỏi, máy chủ gửi cho mô hình (Gemini API, hạng miễn phí, model cấu hình được) chỉ những món còn bán và còn hàng kèm tồn kho, **tải bếp** (số suất mỗi món đang chờ hoặc đang làm trên mọi bàn) và **những gì cả bàn đã gọi** (đơn chung của phiên, mục 4.9). Nhờ vậy trợ lý không gợi ý món đã hết, tránh món bếp đang dồn khi khách cần nhanh, và không gợi ý trùng món bàn đã có. Lịch sử trò chuyện do trình duyệt giữ, mỗi lần chỉ gửi tối đa 10 tin gần nhất (mỗi tin ≤ 500 ký tự); máy chủ không lưu và không gửi tên khách hay mã thiết bị cho Gemini.
+
+**Ràng buộc đầu ra.** Máy chủ yêu cầu mô hình trả JSON theo lược đồ cố định (`responseSchema`: `{reply, suggestions: [{menuItemId, quantity, reason}]}`), rồi **kiểm tra lại từng gợi ý**: mã món phải có trong thực đơn còn bán, không trùng, số suất trong 1–10 và không vượt tồn kho; tên và giá luôn lấy từ thực đơn của máy chủ, không lấy từ mô hình. Gợi ý không hợp lệ bị bỏ và được đếm (`assistantSuggestionsDropped`). Trợ lý **không có quyền ghi**: khách tự bấm "Thêm vào giỏ" rồi đặt món qua API đặt món idempotent như cũ (mục 4.3), nên mô hình có "bịa" hay bị lừa bằng câu lệnh chèn trong tin nhắn cũng không tạo được đơn sai giá hay đơn ma.
+
+**Gọi dịch vụ ngoài qua mạng một cách an toàn.** Gemini là một dịch vụ HTTPS bên ngoài với hạn mức thấp ở hạng miễn phí, nên máy chủ:
+
+1. Giới hạn mỗi bàn 5 câu hỏi liên tiếp, hồi 6 câu mỗi phút (token bucket, mục 4.6) → `429` + `Retry-After`.
+2. Đặt timeout 15 s cho mỗi lần gọi; khoá API gửi trong header `x-goog-api-key`, không đặt trên URL.
+3. Gemini trả `429` thì đọc thời gian chờ (`Retry-After` hoặc `retryDelay` trong thân lỗi) và **ngừng gọi** đúng khoảng đó (mặc định 60 s); lỗi liên tiếp (timeout, 5xx) đến ngưỡng 3 lần cũng ngừng gọi 60 s (*circuit breaker*). Trong lúc ngừng, không request nào tới Gemini.
+4. Mọi trường hợp không dùng được AI (chưa có khoá, đang ngừng gọi, lỗi, JSON hỏng) đều trả **gợi ý dự phòng** tính bằng quy tắc từ cùng dữ liệu thời gian thực: ưu tiên nhóm món bàn chưa gọi, trong mỗi nhóm chọn món bếp đang ít suất chờ; câu hỏi nhắc đồ uống / tráng miệng thì chỉ gợi ý nhóm đó. Phản hồi ghi `source: "FALLBACK"` kèm thông báo, nên khách luôn nhận được câu trả lời.
+
+**Baseline để so sánh.** Cờ thực nghiệm `assistantLiveContext` (đổi lúc chạy qua `PUT /api/admin/settings`): bật là đề xuất ở trên; tắt là "chatbot thông thường" chỉ biết thực đơn in sẵn (kể cả món đã hết), không biết tồn kho, tải bếp hay bàn đã gọi gì. Thực nghiệm E7 (mục 8.4) so hai cấu hình này trên cùng bộ câu hỏi.
 
 ---
 
@@ -638,6 +658,7 @@ source/
 │       ├── payment/    PaymentService, PaymentController, PaymentRepository, VnpayGateway,
 │       │               CashierService, CashierController, PaymentDtos
 │       ├── servicecall/ ServiceCallService, ServiceCallController, ServiceCallRepository
+│       ├── assistant/  AssistantService, AssistantController, GeminiClient, LlmClient, AssistantDtos
 │       ├── menu/       MenuService (cache + ETag), MenuDtos
 │       ├── order/      OrderService, OrderRepository, IdempotencyRepository,
 │       │               OrderItemStatus, OrderStatus, OrderController, KitchenController
@@ -696,7 +717,7 @@ source/
 
 ### 7.5. Kiểm thử
 
-`mvn test` chạy 24 test JUnit, tất cả đều qua (báo cáo surefire ngày 25/10/2026: `OrderFlowIntegrationTest` 18, `OrderItemStatusTest` 3, `TokenBucketTest` 3):
+`mvn test` chạy 29 test JUnit, tất cả đều qua (báo cáo surefire ngày 25/10/2026: `OrderFlowIntegrationTest` 18, `AssistantIntegrationTest` 5, `OrderItemStatusTest` 3, `TokenBucketTest` 3):
 
 | Lớp test | Test | Kiểm tra |
 |---|---|---|
@@ -720,8 +741,13 @@ source/
 | | `serviceCallIsDedupedPerSessionAndHandledByCashier` | Gọi phục vụ: nhiều máy cùng bàn gọi → 1 lượt; bếp không xử lý được (403); thu ngân xử lý, gọi lặp không lỗi; trả bàn → lượt gọi biến mất; máy của lượt cũ bị chặn |
 | | `kitchenVoidsPartOfAcceptedItemAndRestoresStock` | Bếp huỷ 1 trong 3 suất đã nhận: tách dòng, tổng đơn giảm, hoàn tồn kho; sai version → 409; lý do khác thiếu ghi chú → 400; khách không gọi được API này; món đã nấu thì không hoàn kho |
 | | `returnedItemAfterPaymentRequiresRefundBeforeCheckout` | Khách trả lại món sau khi đã thanh toán: đang có lần chờ thì chặn; sau đó thu ngân thấy `REFUND_DUE` và số tiền, trả bàn phải xác nhận đã trả lại tiền |
+| `AssistantIntegrationTest` (HTTP thật, H2, mô hình ngôn ngữ giả) | `aiSuggestionsAreValidatedAgainstTheRealMenu` | Gợi ý bịa mã món, trùng, vượt tồn kho bị bỏ; tên và giá lấy từ thực đơn của máy chủ |
+| | `rateLimitedModelFallsBackAndIsNotCalledDuringCooldown` | Mô hình trả 429 → gợi ý dự phòng (hỏi đồ uống thì chỉ gợi ý đồ uống); trong thời gian chờ không gọi mô hình |
+| | `repeatedFailuresOpenTheCircuit` | Lỗi liên tiếp đến ngưỡng → ngừng gọi mô hình |
+| | `brokenJsonAndMissingKeyFallBack` | JSON hỏng hoặc chưa có khoá → gợi ý dự phòng |
+| | `perTableLimitAndValidation` | Quá 3 câu (cấu hình test) → 429 + `Retry-After`; tin cuối không phải của khách, tin quá 500 ký tự → 400 |
 
-Ngoài JUnit, bộ kiểm thử end-to-end `source/loadtest/e2e-test.js` chạy trên máy chủ thật, gồm 18 nhóm; nhóm 15 kiểm tra phiên bàn nhiều điện thoại (đơn chung, tên khách, trả bàn), nhóm 16 kiểm tra thanh toán và quầy thu ngân (gồm phân quyền `/api/cashier` và `/topic/cashier`, IPN VNPay giả lập), nhóm 17 kiểm tra gọi phục vụ (gộp lượt gọi trùng, thông báo real-time tới quầy và tới điện thoại khách), nhóm 18 kiểm tra bếp huỷ / khách trả lại món đã nhận (huỷ một phần, hai máy bếp cùng huỷ chỉ một thành công, tiền cần trả lại khách). Lần chạy ngày 25/10/2026 trên cơ sở dữ liệu H2: `KẾT QUẢ: 205 đạt, 0 lỗi`.
+Ngoài JUnit, bộ kiểm thử end-to-end `source/loadtest/e2e-test.js` chạy trên máy chủ thật, gồm 19 nhóm; nhóm 15 kiểm tra phiên bàn nhiều điện thoại (đơn chung, tên khách, trả bàn), nhóm 16 kiểm tra thanh toán và quầy thu ngân (gồm phân quyền `/api/cashier` và `/topic/cashier`, IPN VNPay giả lập), nhóm 17 kiểm tra gọi phục vụ (gộp lượt gọi trùng, thông báo real-time tới quầy và tới điện thoại khách), nhóm 18 kiểm tra bếp huỷ / khách trả lại món đã nhận (huỷ một phần, hai máy bếp cùng huỷ chỉ một thành công, tiền cần trả lại khách), nhóm 19 kiểm tra trợ lý gợi ý món (gợi ý là món có thật với giá đúng, giới hạn mỗi bàn, máy của lượt cũ bị chặn). Lần chạy ngày 25/10/2026 trên cơ sở dữ liệu H2: `KẾT QUẢ: 212 đạt, 0 lỗi`.
 
 Kiểm thử thủ công khả năng chịu lỗi: trên màn hình bếp bấm "Giả lập mất mạng 5s" trong khi đặt món từ điện thoại; sau khi kết nối lại, bếp tự gửi `/app/resume` và nhận `REPLAY_BATCH` chứa các đơn bị lỡ (quan sát bằng công cụ F12 → Network → WS của trình duyệt). Các ca test tay về đơn chung, thanh toán, trả bàn và VNPay (thẻ test NCB qua tunnel) nằm trong `TEST_CASES.md`. [CẦN ĐIỀN: ảnh chụp màn hình demo]
 
@@ -761,6 +787,7 @@ Bảng sau ghi **tham số thực tế của lần chạy đã có số liệu**
 | E4 | Cập nhật đồng thời | 20 vòng; mỗi vòng tạo 1 món mới rồi 10 client cùng gửi PATCH với `version = 0` (5 client `ACCEPTED`, 5 client `CANCELLED`); khoá lạc quan tắt/bật | 50 vòng | Số cập nhật thành công, lost update (= thành công − số vòng), số 409 |
 | E5 | Tải tăng dần | 10, 50, 100 client vòng kín (gửi request kế tiếp ngay khi nhận phản hồi), mỗi mức 10 s, 0 kết nối WebSocket mở sẵn | 10, 25, 50, 100, 200 client, mỗi mức 20 s; thêm một lượt với 500 kết nối WebSocket mở sẵn | Throughput, tỷ lệ lỗi, p50/p95/p99, CPU |
 | E6 | Client spam | 15 s; 30 khách thường (mỗi khách một IP giả lập qua `X-Forwarded-For`, mỗi giây 1 `GET /api/orders`, thỉnh thoảng đặt 1 đơn); 1 bàn spam với 50 luồng `POST /api/orders` liên tục; rate limit tắt/bật | 30 s | Độ trễ của khách thường, số request spam được nhận/bị 429, CPU |
+| E7 | Trợ lý gợi ý món | 24 câu hỏi tiếng Việt có ràng buộc chấm tự động, 7 câu trong kịch bản dựng sẵn (bếp đang dồn món, món hết hàng, bàn đã gọi sẵn); cấu hình `live` (ngữ cảnh thời gian thực) và `static` (chỉ thực đơn in sẵn); Gemini API hạng miễn phí | – | Tỷ lệ đạt ràng buộc, gợi ý bị máy chủ loại, độ trễ, số câu dùng dự phòng |
 
 Trong E1–E3, E5 rate limit được tắt để không ảnh hưởng tới phép đo. Ở E6, máy chủ tạm thời tin header `X-Forwarded-For` để giả lập nhiều IP từ một máy, và tắt lại sau khi đo.
 
@@ -870,7 +897,18 @@ Số đơn của khách thường (30 và 29) khác nhau do thời điểm đặ
 | Tắt (MySQL, 30 s) | [CẦN ĐIỀN SỐ LIỆU MYSQL] | | | |
 | Bật (MySQL, 30 s) | [CẦN ĐIỀN SỐ LIỆU MYSQL] | | | |
 
-### 9.7. Tổng hợp baseline và đề xuất
+### 9.7. E7 – Trợ lý gợi ý món
+
+Thiết lập (`source/loadtest/assistant-eval.js`): 24 câu hỏi tiếng Việt có ràng buộc chấm tự động (ngân sách, giá mỗi món, nhóm món, món phải tránh vì chay / dị ứng / không cồn / không ăn cay, câu không liên quan phải không gợi ý, câu chèn lệnh "bỏ qua mọi quy tắc"). Bảy câu chạy trong kịch bản dựng bằng API thật: **bếp đang dồn** 16 suất Phở và Bún chả (câu hỏi "món nào ra nhanh"), **món hết hàng** (Bò lúc lắc tồn kho 0), **bàn đã gọi sẵn** vài món. Mỗi câu chạy trên một phiên bàn mới, cách nhau 7 s để không vượt hạn mức miễn phí. So hai cấu hình: `live` (đề xuất, có ngữ cảnh thời gian thực) và `static` (baseline, chỉ thực đơn in sẵn). Đo: tỷ lệ câu đạt mọi ràng buộc, số gợi ý bị máy chủ loại (món không có thật / hết hàng), độ trễ phản hồi, số câu phải dùng gợi ý dự phòng.
+
+| Cấu hình | Số câu | Đạt (%) | Câu kịch bản thời gian thực đạt | Gợi ý bị máy chủ loại | Độ trễ p50 / p95 (ms) | Câu dùng dự phòng |
+|---|---:|---:|---:|---:|---|---:|
+| `live` (đề xuất) | 24 | [CẦN ĐIỀN: chạy `node assistant-eval.js` với `GEMINI_API_KEY`] | | | | |
+| `static` (baseline) | 24 | [CẦN ĐIỀN] | | | | |
+
+Khi chưa cấu hình khoá, mọi câu trả lời là gợi ý dự phòng; lần chạy thử như vậy (25/10/2026, H2) chỉ kiểm tra script, không dùng làm số liệu.
+
+### 9.8. Tổng hợp baseline và đề xuất
 
 **Bảng 7.** Tổng hợp (H2, lần chạy rút gọn).
 
@@ -957,6 +995,7 @@ Các thực nghiệm E2–E4 cho thấy ba lỗi thường gặp ở ứng dụn
 | 9 | Phiên bàn và thanh toán dùng chung cho nhiều điện thoại, an toàn khi đồng thời | Phiên bàn mở bằng `UPDATE … WHERE current_session_id IS NULL`; một lần thanh toán đang chờ mỗi phiên bằng `UNIQUE (pending_session_id)`; xác nhận tiền mặt bằng khoá lạc quan | Test `concurrentJoinOpensOnlyOneSession`, `cashPaymentFlowAndCheckout`; e2e nhóm 15, 16 |
 | 10 | Gọi phục vụ không báo trùng | Ràng buộc `UNIQUE (open_session_id)` gộp mọi lần bấm của cùng một bàn; chỉ request tạo được lượt mới mới phát sự kiện; "Đã xử lý" bằng `UPDATE` có điều kiện | Test `serviceCallIsDedupedPerSessionAndHandledByCashier`; e2e nhóm 17: 5 máy cùng bấm → 1 lượt, quầy nhận đúng 1 thông báo |
 | 11 | Huỷ / trả lại món đã nhận an toàn khi đồng thời | Khoá lạc quan + tách dòng trong một giao dịch; sự kiện `ORDER_UPDATED` có `seq`, client gộp theo `version`; tiền dư thành `REFUND_DUE`, trả bàn phải xác nhận | Test `kitchenVoidsPartOfAcceptedItemAndRestoresStock`, `returnedItemAfterPaymentRequiresRefundBeforeCheckout`; e2e nhóm 18: hai máy bếp cùng huỷ → đúng 1 thành công |
+| 12 | Trợ lý gợi ý món neo vào trạng thái thời gian thực, bị ràng buộc và chịu lỗi khi gọi dịch vụ ngoài | Ngữ cảnh gửi cho mô hình gồm tồn kho, tải bếp, đơn chung của bàn; đầu ra JSON theo lược đồ, máy chủ kiểm lại từng gợi ý (giá và tên lấy từ thực đơn), trợ lý không có quyền ghi; giới hạn mỗi bàn, timeout, tôn trọng `Retry-After` của Gemini, circuit breaker, gợi ý dự phòng khi AI không dùng được | 5 test `AssistantIntegrationTest` (mô hình giả); e2e nhóm 19. Hiệu quả so với chatbot chỉ biết thực đơn tĩnh: E7 [CẦN ĐIỀN SỐ LIỆU sau khi chạy với khoá Gemini] |
 
 **So sánh baseline và đề xuất**
 
@@ -987,6 +1026,7 @@ Các thực nghiệm E2–E4 cho thấy ba lỗi thường gặp ở ứng dụn
 13. **`ORDER_UPDATED` gửi cả đơn** nên payload lớn hơn gửi riêng phần thay đổi; với đơn nhiều món, chi phí băng thông của sự kiện này chưa được đo.
 14. **Khoá VNPay sandbox nằm trong mã nguồn** để máy nào cũng chạy được ngay; chấp nhận được vì là môi trường thử, nhưng ai có mã nguồn cũng tạo được giao dịch thử bằng merchant của nhóm.
 15. **Nghiệp vụ POS chưa đầy đủ**: chưa có giảm giá, phí phục vụ, VAT; nhân viên chưa gọi món hộ khách; chưa chuyển / gộp bàn, tách hóa đơn, in hóa đơn; chưa có báo cáo doanh thu, chốt ca, quản lý tài khoản nhân viên; tuỳ chọn món (size, topping) chỉ ghi được bằng ghi chú.
+16. **Trợ lý gợi ý món phụ thuộc dịch vụ ngoài.** Cần Internet và khoá Gemini; hạng miễn phí có hạn mức thấp (vài request mỗi phút) và có thể đổi bất cứ lúc nào; kết quả của mô hình không cố định giữa các lần chạy, nên E7 cần chạy nhiều lần mới có số liệu đáng tin. Bộ câu hỏi do nhóm tự soạn (24 câu), chưa đánh giá với khách thật; các ràng buộc như "ăn chay" được chấm theo danh sách món do nhóm quy ước. Dữ liệu gửi qua hạng miễn phí có thể được Google dùng để cải thiện sản phẩm.
 
 ---
 
@@ -1085,6 +1125,7 @@ Báo cáo đã trình bày QR Order, một hệ thống gọi món qua QR có m�
 | GET | `/api/payments/vnpay/return` | Chữ ký VNPay | Trình duyệt quay về; `302` về trang gọi món |
 | POST | `/api/service-calls` | `X-Table-Token` | Gọi phục vụ `{guestName}`, kèm `X-Session-Id`; `201` lượt mới, `200` nếu bàn đã có lượt đang mở |
 | GET | `/api/service-calls/current` | `X-Table-Token` | Lượt gọi đang mở của bàn; `204` nếu không có |
+| POST | `/api/assistant/chat` | `X-Table-Token` | Trợ lý gợi ý món `{messages: [{role: user\|bot, text}]}` (≤ 10 tin, mỗi tin ≤ 500 ký tự), kèm `X-Session-Id`; trả `{reply, suggestions: [{menuItemId, name, price, quantity, reason}], source: AI\|FALLBACK, notice}`; `429` khi một bàn hỏi quá nhanh |
 | POST | `/api/auth/login` | – | `{username, password}` → token nhân viên |
 | GET | `/api/kitchen/orders` | Bearer | Ảnh chụp đơn đang mở + `latestSeq` |
 | GET | `/api/kitchen/events?afterSeq=` | Bearer | Dùng cho chế độ POLLING |
@@ -1102,7 +1143,7 @@ Báo cáo đã trình bày QR Order, một hệ thống gọi món qua QR có m�
 | GET | `/api/admin/payments` | Bearer (ADMIN) | Lịch sử thanh toán |
 | GET/POST/PUT | `/api/admin/categories`, `/api/admin/menu-items[/{id}]` | Bearer (ADMIN) | Quản lý thực đơn |
 | GET | `/api/admin/monitor`, `/api/admin/stats?since=` | Bearer (ADMIN) | Giám sát kết nối, thống kê |
-| GET/PUT | `/api/admin/settings` | Bearer (ADMIN) | Bật/tắt baseline: `deliveryMode`, `idempotencyEnabled`, `optimisticLockEnabled`, `rateLimitEnabled`, `trustForwardedFor` |
+| GET/PUT | `/api/admin/settings` | Bearer (ADMIN) | Bật/tắt baseline: `deliveryMode`, `idempotencyEnabled`, `optimisticLockEnabled`, `rateLimitEnabled`, `trustForwardedFor`, `assistantLiveContext` |
 | POST | `/api/admin/maintenance/clear-test-orders` | Bearer (ADMIN) | Dọn dữ liệu các bàn `LT…` |
 | GET | `/actuator/health`, `/actuator/metrics/...` | – | Giám sát, lấy mẫu CPU |
 
@@ -1160,6 +1201,9 @@ Thời gian lưu dưới dạng epoch mili-giây (BIGINT). Tên món và giá đ
 | `app.vnpay.tmn-code` / `hash-secret` | khoá **sandbox** của nhóm; biến môi trường `VNPAY_TMN_CODE` / `VNPAY_HASH_SECRET` ghi đè | Để trống thì ẩn VNPay; khoá production không ghi vào file |
 | `app.vnpay.pay-url` / `api-url` | sandbox của VNPay | Trang thanh toán / API `querydr` |
 | `app.vnpay.public-url` | biến môi trường `APP_PUBLIC_URL`, mặc định trống | Địa chỉ công khai để tạo Return URL; trống thì lấy theo request |
+| `app.assistant.gemini-api-key` / `gemini-model` | biến môi trường `GEMINI_API_KEY` (mặc định trống) / `GEMINI_MODEL` (mặc định `gemini-flash-latest`) | Trống thì trợ lý chỉ dùng gợi ý dự phòng; khoá không ghi vào file |
+| `app.assistant.per-table-capacity` / `per-table-refill-per-minute` | `5` / `6` | Giới hạn câu hỏi mỗi bàn |
+| `app.assistant.timeout-ms`, `cooldown-seconds`, `failure-threshold` | `15000`, `60`, `3` | Timeout mỗi lần gọi Gemini; thời gian ngừng gọi khi hết lượt / lỗi liên tiếp; số lỗi liên tiếp trước khi ngừng gọi |
 | `server.tomcat.threads.max` / `max-connections` / `accept-count` | `200` / `2000` / `100` | |
 | `spring.datasource.hikari.maximum-pool-size` / `connection-timeout` | `20` / `3000` | |
 | `spring.jdbc.template.query-timeout` | `3s` | |
