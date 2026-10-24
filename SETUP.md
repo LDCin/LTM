@@ -151,6 +151,9 @@ sửa lại biến `JAVA_HOME` cho trỏ tới JDK 17.
 
 ## 4. Cài Node.js
 
+> Chỉ cần nếu sửa giao diện React hoặc chạy test e2e / thực nghiệm. Chỉ chạy hệ thống để demo thì **bỏ qua bước này**:
+> bản build giao diện đã có sẵn trong Git.
+
 **Cách nhanh:**
 
 ```bash
@@ -228,8 +231,12 @@ cd C:\Projects
 ```
 
 ```bash
-git clone https://github.com/LDCin/LTM.git
+git clone -b feat/separate_visual https://github.com/LDCin/LTM.git
 ```
+
+> **Lưu ý nhánh:** bản mới nhất (phiên bàn, thu ngân, thanh toán VNPay) đang nằm ở nhánh `feat/separate_visual`, chưa gộp
+> vào `main`. Clone thường (không có `-b`) sẽ lấy `main` là bản cũ. Đã clone rồi thì chuyển nhánh bằng
+> `git checkout feat/separate_visual`, sau đó mỗi lần cập nhật chỉ cần `git pull`.
 
 (Hoặc tải thư mục nộp bài từ Google Drive và giải nén.) Cấu trúc chính:
 
@@ -376,7 +383,10 @@ Trong log sẽ thấy:
 Kiểm tra nhanh bằng trình duyệt: mở http://localhost:8080/actuator/health → thấy `{"status":"UP"}`.
 
 Với MySQL Workbench: bấm Refresh ở khung **Schemas** sẽ thấy database `qrorder` với các bảng `orders`, `order_item`,
-`order_event`, `idempotency_key`...
+`order_event`, `idempotency_key`, `table_session`, `payment`...
+
+> **Máy đã chạy bản cũ trước đây:** không cần xoá database. Khi khởi động, server tự thêm các cột và bảng mới (tên khách,
+> lý do kết thúc phiên, bảng `payment`) và đưa mọi bàn về trạng thái "đang phục vụ, chưa có khách".
 
 ---
 
@@ -524,8 +534,8 @@ Lưu ý: kiểu "quick tunnel" này **đổi địa chỉ mỗi lần chạy**, 
    `localhost`). Kiểm tra ô **"Địa chỉ in trong QR"** đã là địa chỉ tunnel; nếu chưa, sửa ô đó.
 2. Vào **Bàn & QR** để hiển thị / in mã QR (không cần mở bàn: phiên tự mở khi khách quét).
 3. Dùng điện thoại **tắt Wi-Fi, bật 4G** quét QR: vào được trang gọi món là tunnel hoạt động.
-4. Màn hình bếp có thể mở bằng `http://localhost:8080/kitchen` ngay trên máy chủ, hoặc
-   `https://<dia-chi-tunnel>/kitchen` trên máy tính bảng khác.
+4. Màn hình bếp và thu ngân có thể mở bằng `http://localhost:8080/kitchen`, `http://localhost:8080/cashier` ngay trên
+   máy chủ, hoặc `https://<dia-chi-tunnel>/kitchen`, `https://<dia-chi-tunnel>/cashier` trên máy khác.
 5. Kiểm tra WebSocket: đặt một món từ điện thoại, đơn phải hiện ngay ở bếp. Nếu badge trạng thái kết nối ở trang khách
    hoặc bếp không chuyển xanh, xem [Lỗi thường gặp](#16-lỗi-thường-gặp).
 
@@ -574,8 +584,11 @@ DB_PASSWORD=...;AUTH_SECRET=...;VNPAY_TMN_CODE=<ma-website>;VNPAY_HASH_SECRET=<c
   server tự lấy theo địa chỉ khách đang mở trang (đúng khi khách mở bằng địa chỉ tunnel).
 * Nên dùng **ngrok với tên miền cố định** (`ngrok http 8080 --url=<ten-mien>.ngrok-free.dev`), vì IPN URL khai báo với
   VNPay phải giữ nguyên: `https://<ten-mien>.ngrok-free.dev/api/payments/vnpay/ipn`.
-* Cách thử: khách bấm **Thanh toán → VNPay** → trang VNPay → chọn thẻ nội địa **NCB** và nhập thẻ test trong tài liệu
-  VNPay sandbox → VNPay đưa về trang gọi món, bàn hiện "Đã thanh toán đủ", thu ngân thấy bàn chuyển "Đã thanh toán".
+* Cách thử: khách bấm **Thanh toán → VNPay** → trang VNPay → **Thẻ nội địa và tài khoản ngân hàng** → **NCB**, nhập
+  thẻ test của VNPay sandbox: số thẻ `9704198526191432198`, tên `NGUYEN VAN A`, ngày phát hành `07/15`, OTP `123456` →
+  VNPay đưa về trang gọi món, bàn hiện "Đã thanh toán đủ", thu ngân thấy bàn chuyển "Đã thanh toán".
+* **Khoá sandbox dùng chung cả nhóm, nhưng IPN URL chỉ khai báo được một địa chỉ.** Máy nào có tên miền ngrok trùng với
+  IPN URL đã khai báo thì nhận được IPN; các máy khác vẫn thanh toán được nhờ Return URL và tra cứu giao dịch bên dưới.
 * Server xác nhận tiền bằng hai đường: **IPN** (server VNPay gọi thẳng server mình, có chữ ký) và **Return URL** (dữ
   liệu có chữ ký trên trình duyệt). Chưa khai báo được IPN với VNPay thì đường thứ hai vẫn đủ; ngoài ra server tự **tra
   cứu giao dịch** với VNPay trước khi cho một lần thanh toán hết hạn (15 phút).
@@ -596,7 +609,7 @@ cd C:\Projects\LTM\source\server
 mvn test
 ```
 
-Kết quả đúng: `Tests run: 14, Failures: 0, Errors: 0`. Test chạy bằng cơ sở dữ liệu H2 riêng, không đụng tới MySQL.
+Kết quả đúng: `Tests run: 21, Failures: 0, Errors: 0`. Test chạy bằng cơ sở dữ liệu H2 riêng, không đụng tới MySQL.
 
 ### 13.2. End-to-end (server phải đang chạy ở cổng 8080)
 
@@ -605,7 +618,7 @@ cd C:\Projects\LTM\source\loadtest
 npm run e2e
 ```
 
-Kết quả đúng: `KẾT QUẢ: 143 đạt, 0 lỗi`. Nếu server chạy cổng khác:
+Kết quả đúng: `KẾT QUẢ: 181 đạt, 0 lỗi` (cần Node.js và đã chạy `npm install` ở Bước 8.3). Nếu server chạy cổng khác:
 `node e2e-test.js --base=http://localhost:8081`.
 
 ---
@@ -661,7 +674,13 @@ node run-all.js
 | Mã QR cũ không dùng được sau khi chạy lại tunnel | Địa chỉ quick tunnel của Cloudflare (hoặc ngrok không dùng tên miền cố định) đổi mỗi lần chạy. In lại QR, hoặc dùng tên miền cố định của ngrok |
 | Trang cảnh báo của ngrok hiện ra trước trang gọi món | Bình thường với gói miễn phí: bấm **Visit Site** |
 | Nhiều người cùng dùng qua tunnel bị báo "thao tác quá nhanh" (429) | Mọi request qua tunnel có chung IP: xem Bước 12.6 |
-| Đặt món báo "thao tác quá nhanh" (429) khi test tay | Giới hạn 5 đơn/phút/bàn: chờ vài giây, hoặc tắt Rate limiting ở Quản trị → Cấu hình thực nghiệm |
+| Đặt món báo "thao tác quá nhanh" (429) khi test tay | Giới hạn 10 đơn/phút/bàn: chờ vài giây, hoặc tắt Rate limiting ở Quản trị → Cấu hình thực nghiệm |
+| Trang khách không có lựa chọn **VNPay** | Ô Environment variables có `VNPAY_TMN_CODE=` hoặc `VNPAY_HASH_SECRET=` để trống: biến trống ghi đè khoá mặc định. Xoá hai biến đó đi |
+| VNPay báo "Sai chữ ký" / "Website này chưa được phê duyệt" | Khoá VNPay sai hoặc bị gõ thừa dấu cách. Xoá biến `VNPAY_*` để dùng khoá mặc định trong `application.yml` |
+| Trả tiền VNPay xong nhưng bàn vẫn "Chờ thanh toán" | Khách đóng trình duyệt trước khi VNPay đưa về và chưa khai báo IPN: chờ tối đa 15 phút để server tự tra cứu giao dịch, hoặc thu ngân mở bàn kiểm tra |
+| Trang khách báo "Phiên đã kết thúc" | Thu ngân đã **Trả bàn**, hoặc phiên tự kết thúc (30 phút không gọi món). Quét lại QR để mở phiên mới |
+| Admin bấm **Đóng bàn** bị báo bàn đang có khách | Đúng thiết kế: phải **Trả bàn** ở trang Thu ngân trước |
+| ngrok báo `unknown flag: --url` hoặc `ERR_NGROK_121` | ngrok quá cũ: chạy `ngrok update` rồi chạy lại |
 | Trang bếp báo "Lỗi kết nối" sau một thời gian | Phiên đăng nhập hết hạn (12 giờ), hoặc vừa đổi `AUTH_SECRET`: Đăng xuất rồi đăng nhập lại |
 | Link trong log server dạng `localhost:5173/...` không mở được | Link đó dành cho `npm run dev`. Khi chạy server bình thường, đổi `5173` thành `8080` |
 
@@ -669,10 +688,11 @@ node run-all.js
 
 ## Tóm tắt (khi máy đã cài đủ phần mềm và MySQL đang chạy)
 
-1. `git clone https://github.com/LDCin/LTM.git`, mở `LTM/source/server` bằng IntelliJ, chọn JDK 17.
+1. `git clone -b feat/separate_visual https://github.com/LDCin/LTM.git`, mở `LTM/source/server` bằng IntelliJ, chọn JDK 17.
 2. **Run → Edit Configurations → QrOrderApplication → Environment variables**:
    `DB_PASSWORD=mat_khau_root_cua_ban;AUTH_SECRET=mot-chuoi-ngau-nhien-that-dai`.
 3. (Chỉ khi sửa code React) Terminal IntelliJ: `cd C:\Projects\LTM\source\client`, `npm install`, `npm run build`.
 4. Bấm ▶ chạy `QrOrderApplication`, chờ `Started QrOrderApplication`.
 5. Terminal khác: `ngrok http 8080` (hoặc `cloudflared tunnel --url http://localhost:8080`).
-6. Mở `https://<dia-chi-tunnel>/admin` (`admin` / `admin123`) để in mã QR cho điện thoại.
+6. Mở `https://<dia-chi-tunnel>/admin` (`admin` / `admin123`) để in mã QR cho điện thoại; thu ngân ở `/cashier`
+   (`thungan` / `thungan123`). VNPay sandbox dùng được ngay, không cần khai báo khoá.
