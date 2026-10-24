@@ -8,7 +8,6 @@ const TABS = [
   ['tables', '🪑 Bàn & QR'],
   ['menu', '📋 Thực đơn'],
   ['payments', '💳 Thanh toán'],
-  ['monitor', '📡 Giám sát'],
   ['settings', '🧪 Cấu hình thực nghiệm'],
 ];
 
@@ -55,7 +54,6 @@ export default function Admin() {
         {tab === 'tables' && <TablesTab api={api} />}
         {tab === 'menu' && <MenuTab api={api} />}
         {tab === 'payments' && <PaymentsTab api={api} />}
-        {tab === 'monitor' && <MonitorTab api={api} />}
         {tab === 'settings' && <SettingsTab api={api} />}
       </main>
     </div>
@@ -364,98 +362,6 @@ function MenuTab({ api }) {
           Thêm
         </button>
       </div>
-    </div>
-  );
-}
-
-// ------------------------------------------------------------------ giám sát
-
-function MonitorTab({ api }) {
-  const [data, setData] = useState(null);
-  const [error, setError] = useState(null);
-
-  useEffect(() => {
-    let alive = true;
-    const tick = async () => {
-      try {
-        const d = await api('GET', '/api/admin/monitor');
-        if (alive) {
-          setData(d);
-          setError(null);
-        }
-      } catch (e) {
-        if (alive) setError(e.message);
-      }
-    };
-    tick();
-    const timer = setInterval(tick, 2000);
-    return () => {
-      alive = false;
-      clearInterval(timer);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  if (!data) return <p>{error || 'Đang tải...'}</p>;
-  return (
-    <div>
-      {error && <p className="error">{error}</p>}
-      <div className="stat-grid">
-        <Stat label="Chế độ giao đơn" value={data.settings.deliveryMode} />
-        <Stat label="Seq mới nhất" value={data.latestSeq} />
-        <Stat label="Màn hình bếp online" value={data.staffConnections} />
-        <Stat label="Khách đang kết nối" value={data.customerConnections} />
-        {Object.entries(data.counters).map(([k, v]) => (
-          <Stat key={k} label={COUNTER_LABELS[k] || k} value={v} />
-        ))}
-        <Stat label="Thread JVM" value={data.jvm.threads} />
-        <Stat label="Heap (MB)" value={`${data.jvm.heapUsedMb} / ${data.jvm.heapMaxMb}`} />
-        <Stat label="Bucket rate-limit" value={data.rateLimitBuckets} />
-      </div>
-      <h3>Kết nối WebSocket ({data.connections.length})</h3>
-      <table className="data-table">
-        <thead>
-          <tr>
-            <th>Session</th>
-            <th>Loại</th>
-            <th>Tên</th>
-            <th>Kết nối lúc</th>
-            <th>ACK seq</th>
-            <th>Độ trễ (seq chưa ACK)</th>
-          </tr>
-        </thead>
-        <tbody>
-          {data.connections.map((c) => (
-            <tr key={c.sessionId}>
-              <td className="mono">{c.sessionId.slice(0, 8)}</td>
-              <td>{c.role === 'STAFF' ? 'Bếp' : 'Khách'}</td>
-              <td>{c.label}</td>
-              <td>{new Date(c.connectedAt).toLocaleTimeString('vi-VN')}</td>
-              <td>{c.role === 'STAFF' ? c.lastAckSeq : '-'}</td>
-              <td>{c.lag ?? '-'}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-const COUNTER_LABELS = {
-  ordersCreated: 'Đơn đã tạo',
-  duplicateRequestsBlocked: 'Request trùng bị chặn',
-  rateLimited: 'Request bị giới hạn (429)',
-  versionConflicts: 'Xung đột phiên bản (409)',
-  wsConnectRejected: 'Kết nối WS bị từ chối',
-  eventsPublished: 'Sự kiện đã phát',
-  replayRequests: 'Yêu cầu RESUME',
-};
-
-function Stat({ label, value }) {
-  return (
-    <div className="stat">
-      <div className="stat-value">{String(value)}</div>
-      <div className="stat-label">{label}</div>
     </div>
   );
 }

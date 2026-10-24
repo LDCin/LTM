@@ -61,7 +61,7 @@ Mở `http://localhost:8080`. Dữ liệu mẫu được tạo tự động:
 
 | Trang | Đường dẫn | Tài khoản |
 |---|---|---|
-| Quản trị (bàn, QR, thực đơn, giám sát) | `/admin` | `admin` / `admin123` |
+| Quản trị (bàn, QR, thực đơn, lịch sử thanh toán) | `/admin` | `admin` / `admin123` |
 | Màn hình bếp | `/kitchen` | `bep` / `bep123` |
 | Thu ngân / lễ tân (sơ đồ bàn, thanh toán, trả bàn, khách gọi phục vụ) | `/cashier` | `thungan` / `thungan123` |
 | Khách gọi món | `/t/<qrToken>` (quét QR ở trang Quản trị, hoặc xem link trong log khởi động) | – |

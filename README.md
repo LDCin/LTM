@@ -81,7 +81,7 @@ Một ứng dụng web React (3 trang: khách `/t/:token`, bếp `/kitchen`, qu�
 
 * Khách tại bàn (điện thoại, trình duyệt).
 * Nhân viên bếp (máy tính bảng/màn hình bếp).
-* Quản lý nhà hàng (quản trị bàn, mã QR, thực đơn, giám sát kết nối).
+* Quản lý nhà hàng (quản trị bàn, mã QR, thực đơn, lịch sử thanh toán).
 
 ## 3.3. Main Functions
 
@@ -94,7 +94,7 @@ Một ứng dụng web React (3 trang: khách `/t/:token`, bếp `/kitchen`, qu�
 | Đổi trạng thái món | State machine `PENDING→ACCEPTED→COOKING→READY→SERVED`, `PENDING→CANCELLED`; khoá lạc quan theo `version` | Done |
 | Khách theo dõi trạng thái | `/topic/table.{id}`; tải lại đơn khi kết nối lại | Done |
 | Đăng nhập nhân viên | Token HMAC-SHA256 tự ký, mật khẩu BCrypt | Done |
-| Quản trị | Bàn, QR (sinh ở frontend), thực đơn, giám sát kết nối/lag ACK, bật/tắt baseline | Done |
+| Quản trị | Bàn, QR (sinh ở frontend), thực đơn, lịch sử thanh toán, bật/tắt baseline | Done |
 | Chống quá tải | Token bucket theo IP và theo bàn (429 + Retry-After), ≤ 8 kết nối WS/bàn, giới hạn buffer/frame | Done |
 | Thực nghiệm E1–E6 | `source/loadtest` | Done (mới chạy bản rút gọn trên H2) |
 
@@ -135,7 +135,7 @@ statics/architecture.png
 | --------- | -------------- |
 | Client – khách | Thực đơn, giỏ hàng, đặt món kèm Idempotency-Key, nhận trạng thái món của bàn |
 | Client – bếp | Ảnh chụp đơn + `latestSeq`, nhận sự kiện (`kitchenFeed.js`), ACK/RESUME, đổi trạng thái kèm `version` |
-| Client – quản trị | Bàn, QR, thực đơn, giám sát, cấu hình thực nghiệm |
+| Client – quản trị | Bàn, QR, thực đơn, lịch sử thanh toán, cấu hình thực nghiệm |
 | Server – REST | Xác thực, rate limit, validation, lỗi thống nhất `{error, message, details, timestamp}` |
 | Server – WebSocket | Handshake `/ws`, STOMP 1.2, phân quyền CONNECT/SUBSCRIBE/SEND, heart-beat 10 s, backpressure |
 | Service | `OrderService` (idempotency, state machine, optimistic lock, transaction), `TableService`, `MenuService`, `AuthService` |
