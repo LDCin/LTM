@@ -10,19 +10,21 @@ nó nằm ở đâu trong dự án. Đọc theo thứ tự từ trên xuống.
 * **Server (máy chủ)**: chương trình chạy liên tục, **chờ người khác gửi yêu cầu tới** rồi trả lời. Trong dự án, đó là
   chương trình Java Spring Boot bạn bấm ▶ trong IntelliJ.
 * **Client (máy khách)**: chương trình **chủ động gửi yêu cầu** tới server. Trong dự án, đó là trang web mở trên điện
-  thoại của khách, trên máy tính bảng ở bếp và trên laptop của quản lý.
+  thoại của khách, trên máy tính bảng ở bếp, trên máy tính ở quầy thu ngân và trên laptop của quản lý.
 
-> Ví dụ đời thường: server giống **quầy lễ tân** của nhà hàng, ngồi cố định một chỗ. Khách, bếp, quản lý là những người
-> **đi tới quầy** để hỏi hoặc báo việc.
+> Ví dụ đời thường: server giống **quầy lễ tân** của nhà hàng, ngồi cố định một chỗ. Khách, bếp, thu ngân, quản lý là
+> những người **đi tới quầy** để hỏi hoặc báo việc.
 
 Điểm quan trọng: **khách và bếp không nói chuyện trực tiếp với nhau.** Khách đưa đơn cho quầy (server), quầy chuyển
 xuống bếp.
 
 ```text
   Điện thoại khách ──┐
-                     ├──▶  SERVER  ──▶  Cơ sở dữ liệu (MySQL)
   Màn hình bếp ──────┤
-  Laptop quản lý ────┘
+                     ├──▶  SERVER  ──▶  Cơ sở dữ liệu (MySQL)
+  Máy thu ngân ──────┤       ▲
+  Laptop quản lý ────┘       │
+                       Cổng thanh toán VNPay (một server khác, mục 13)
 ```
 
 ---
@@ -71,8 +73,8 @@ Bạn không phải tự lập trình TCP; Java và trình duyệt làm sẵn. M
 |---|---|---|
 | **Method** (động từ) | Muốn làm gì: `GET` = lấy, `POST` = tạo mới, `PATCH` = sửa một phần | `POST` |
 | **Đường dẫn (URL)** | Làm với cái gì | `/api/orders` (các đơn hàng) |
-| **Header** | Thông tin kèm theo, ví dụ bạn là ai | `X-Table-Token: <mã QR của bàn>` |
-| **Body** | Dữ liệu gửi đi, viết dạng **JSON** | `{"items":[{"menuItemId":12,"quantity":2}]}` |
+| **Header** | Thông tin kèm theo, ví dụ bạn là ai | `X-Table-Token: <mã QR của bàn>`, `X-Session-Id: <mã lượt khách>` |
+| **Body** | Dữ liệu gửi đi, viết dạng **JSON** | `{"guestName":"Minh","items":[{"menuItemId":12,"quantity":2}]}` |
 
 Server trả lời bằng một **mã trạng thái** (con số) và dữ liệu JSON:
 
@@ -81,7 +83,7 @@ Server trả lời bằng một **mã trạng thái** (con số) và dữ liệu
 | `200` / `201` | Thành công / đã tạo mới |
 | `400` | Bạn gửi sai dữ liệu |
 | `401` | Bạn chưa đăng nhập hoặc mã QR sai |
-| `409` | Xung đột, ví dụ người khác vừa sửa món này |
+| `409` | Xung đột, ví dụ người khác vừa sửa món này, hoặc bàn đang thanh toán nên chưa gọi thêm được |
 | `422` | Món đã hết |
 | `429` | Bạn gửi quá nhanh |
 
@@ -102,11 +104,13 @@ Server trả:       201 Created
 
 | File | Nhận những request nào |
 |---|---|
-| `order/OrderController.java` | Khách đặt món, xem đơn, huỷ đơn |
+| `order/OrderController.java` | Khách đặt món, xem đơn chung của bàn, huỷ đơn |
 | `order/KitchenController.java` | Bếp lấy danh sách đơn, đổi trạng thái món |
-| `PublicController.java` | Lấy thực đơn, đổi mã QR thành thông tin bàn |
+| `PublicController.java` | Lấy thực đơn, đổi mã QR thành thông tin bàn, **vào bàn** (`POST .../join`) |
+| `payment/PaymentController.java` | Khách xem hóa đơn, bấm thanh toán; VNPay gọi về (IPN, Return URL) |
+| `payment/CashierController.java` | Thu ngân xem sơ đồ bàn, xác nhận đã nhận tiền, trả bàn |
 | `auth/AuthController.java` | Nhân viên đăng nhập |
-| `admin/AdminController.java` | Quản lý bàn, thực đơn, xem giám sát |
+| `admin/AdminController.java` | Quản lý bàn, thực đơn, lịch sử thanh toán, xem giám sát |
 
 Phía client, file `source/client/src/lib/api.js` là chỗ gửi các request này đi.
 
@@ -153,13 +157,15 @@ không có quy ước, server đẩy một tin "có đơn mới" thì gửi cho 
 
 * Mỗi kênh có một tên, gọi là **destination** (đích), ví dụ:
   * `/topic/kitchen`: kênh của bếp
-  * `/topic/table.5`: kênh riêng của bàn 5
+  * `/topic/table.5`: kênh chung của bàn 5 (**mọi điện thoại** đang ngồi bàn 5 cùng nghe)
+  * `/topic/cashier`: kênh của quầy thu ngân (bàn nào đang ăn, đang chờ thanh toán, đã thanh toán)
   * `/topic/menu`: kênh thông báo thực đơn thay đổi
 * Client **đăng ký nghe** kênh nào thì gõ lệnh `SUBSCRIBE` kênh đó.
 * Server **phát** một tin vào kênh, mọi client đang nghe kênh đó đều nhận được.
 
-> Bếp bật bộ đàm kênh "bếp". Điện thoại bàn 5 bật kênh "bàn 5". Khi bàn 5 đặt món, server nói vào **cả hai kênh**: bếp
-> nghe thấy đơn mới, điện thoại bàn 5 nghe thấy xác nhận. Bàn 6 không nghe thấy gì.
+> Bếp bật bộ đàm kênh "bếp". Mọi điện thoại bàn 5 bật kênh "bàn 5". Thu ngân bật kênh "thu ngân". Khi một người ở bàn 5
+> đặt món, server nói vào **cả ba kênh**: bếp nghe thấy đơn mới, **mọi điện thoại bàn 5** thấy đơn đó trong danh sách
+> chung của bàn, thu ngân thấy tạm tính của bàn 5 tăng lên. Bàn 6 không nghe thấy gì.
 
 Mỗi tin nhắn STOMP gọi là một **frame**, viết bằng chữ thường, rất dễ đọc:
 
@@ -185,7 +191,7 @@ Các lệnh STOMP dùng trong dự án:
 | `SUBSCRIBE` | Client | "Cho tôi nghe kênh này" |
 | `MESSAGE` | Server | Một tin trên kênh đã đăng ký |
 | `SEND` | Client | Client gửi tin lên server (bếp dùng để gửi ACK, RESUME) |
-| `ERROR` | Server | "Bạn làm sai" (ví dụ khách đòi nghe kênh bếp) rồi ngắt |
+| `ERROR` | Server | "Bạn làm sai" (ví dụ khách đòi nghe kênh bếp hay kênh thu ngân) rồi ngắt |
 | `DISCONNECT` | Client | "Tạm biệt" |
 
 ### "Tầng WebSocket/STOMP" trong dự án là gì
@@ -259,8 +265,8 @@ Khách không biết đơn đã gửi được chưa, nên bấm gửi lại. N�
 
 ## 9. Cơ sở dữ liệu (MySQL)
 
-Server không tự nhớ dữ liệu lâu dài; nó cất vào **MySQL**: bàn, thực đơn, đơn hàng, các món trong đơn, danh sách sự
-kiện có số thứ tự, các mã `Idempotency-Key` đã dùng. Server nói chuyện với MySQL cũng qua một đường ống TCP (cổng
+Server không tự nhớ dữ liệu lâu dài; nó cất vào **MySQL**: bàn, các lượt khách (phiên bàn), thực đơn, đơn hàng, các
+món trong đơn, danh sách sự kiện có số thứ tự, các mã `Idempotency-Key` đã dùng, các lần thanh toán. Server nói chuyện với MySQL cũng qua một đường ống TCP (cổng
 3306). Phần này dùng JDBC, bạn chỉ cần biết nó là "cách Java gửi câu lệnh SQL tới MySQL".
 
 ---
@@ -278,20 +284,25 @@ và nhận về một địa chỉ công khai, ví dụ `https://abc.trycloudfla
 Điện thoại 4G ──▶ https://abc.trycloudflare.com ──▶ (máy chủ Cloudflare) ──▶ cloudflared trên laptop ──▶ localhost:8080
 ```
 
-REST và WebSocket đều đi qua đường này.
+REST và WebSocket đều đi qua đường này. Khi dùng VNPay, **server của VNPay cũng gọi về server mình qua đúng đường này**
+(mục 13), nên địa chỉ tunnel phải cố định (ngrok có tên miền cố định).
 
 ---
 
 ## 11. Ghép lại: hành trình của một đơn hàng
 
-1. Khách quét QR → điện thoại mở trang web → gửi **REST** `GET` lấy thực đơn.
+1. Khách quét QR → điện thoại mở trang web → gửi **REST** `POST .../join` để **vào bàn** (mục 12), nhập tên, rồi `GET`
+   lấy thực đơn.
 2. Điện thoại mở **WebSocket**, gửi STOMP `CONNECT` rồi `SUBSCRIBE` kênh `/topic/table.5` của bàn mình.
-3. Khách bấm "Đặt món" → **REST** `POST /api/orders` kèm `Idempotency-Key`.
+3. Khách bấm "Đặt món" → **REST** `POST /api/orders` kèm `Idempotency-Key` và tên khách.
 4. Server lưu đơn vào **MySQL**, gán số thứ tự (ví dụ 42), rồi trả lời điện thoại `201 Created`.
-5. Server đẩy sự kiện "có đơn mới số 42" qua **STOMP** vào kênh `/topic/kitchen` và kênh `/topic/table.5`.
+5. Server đẩy sự kiện "có đơn mới số 42" qua **STOMP** vào kênh `/topic/kitchen` và kênh `/topic/table.5` (mọi điện
+   thoại của bàn), đồng thời báo kênh `/topic/cashier`.
 6. Màn hình bếp (đang nghe `/topic/kitchen`) hiện đơn ngay, gửi **ACK** "đã nhận 42".
 7. Đầu bếp bấm "Nhận" → **REST** `PATCH` đổi trạng thái món.
 8. Server lưu, rồi đẩy sự kiện "món đã được nhận" qua **STOMP** → điện thoại khách cập nhật ngay.
+9. Ăn xong, khách bấm "Thanh toán" → trả tiền mặt hoặc VNPay (mục 13) → thu ngân bấm **Trả bàn** → mọi điện thoại của
+   bàn hiện "Cảm ơn quý khách".
 
 Tóm lại:
 
@@ -299,13 +310,97 @@ Tóm lại:
 |---|---|---|
 | Giống | Gửi phiếu, chờ phiếu trả lời | Bộ đàm luôn mở, nhiều kênh |
 | Ai bắt đầu | Luôn là client | Server tự nói khi có chuyện |
-| Dùng để | **Ra lệnh**: đặt món, huỷ, đổi trạng thái, đăng nhập | **Báo tin**: có đơn mới, món đã xong, thực đơn đổi |
+| Dùng để | **Ra lệnh**: vào bàn, đặt món, huỷ, đổi trạng thái, thanh toán, trả bàn, đăng nhập | **Báo tin**: có đơn mới, món đã xong, đã thanh toán, bàn đã trả, thực đơn đổi |
 | Code server | Các lớp `...Controller.java` | Thư mục `ws/` và `event/` |
 | Code client | `lib/api.js` | `lib/stomp.js`, `lib/connection.js`, `lib/kitchenFeed.js` |
 
 ---
 
-## 12. Bảng thuật ngữ
+## 12. Phiên bàn: nhiều điện thoại chung một bàn
+
+**Phiên bàn** (lượt khách) = một nhóm khách ngồi vào bàn cho tới khi trả bàn và ra về.
+
+* **Tự mở**: khách đầu tiên quét QR thì điện thoại gửi `POST /api/public/tables/{mã QR}/join`. Bàn đang trống → server
+  mở phiên mới; bàn đã có người → vào phiên đang có. Nhân viên không phải bấm gì. Dùng `POST` chứ không `GET` vì
+  request này có thể **tạo** ra phiên mới.
+* **Hai máy quét cùng lúc vẫn chỉ một phiên**: server chạy câu lệnh "gắn phiên mới cho bàn **chỉ khi bàn chưa có
+  phiên**" (`... WHERE current_session_id IS NULL`). MySQL chỉ cho một máy làm được; máy kia thấy bàn đã có phiên thì
+  vào phiên đó.
+
+> Ví dụ đời thường: bàn trống có một tấm biển "Còn trống". Hai người cùng chạy tới lật biển thành "Có khách"; chỉ người
+> lật trước thành công, người sau thấy biển đã lật thì ngồi chung.
+
+* **Đơn chung**: mọi điện thoại trong cùng phiên thấy **tất cả đơn** của bàn, mỗi đơn ghi tên người đặt (khách nhập tên
+  khi vào, có thể bỏ qua). Đơn của chính máy mình có nhãn **BẠN ĐẶT**.
+* **Mã thiết bị** (`X-Device-Id`): trình duyệt tự sinh một mã ngẫu nhiên. Server chỉ dùng nó để biết **máy nào được huỷ
+  đơn nào** (chỉ máy đã đặt mới huỷ được); mã này không bao giờ được gửi cho máy khác.
+* **Mã phiên** (`X-Session-Id`): điện thoại gửi kèm mỗi request. Sau khi trả bàn, điện thoại của lượt cũ gửi mã phiên
+  cũ thì bị từ chối (`409`), nên không đặt nhầm vào lượt của khách sau.
+* **Kết thúc phiên**: thu ngân bấm **Trả bàn** ở trang `/cashier`. Server báo `TABLE_SESSION_ENDED` vào kênh bàn → mọi
+  điện thoại hiện "Cảm ơn quý khách". Phiên cũng tự kết thúc nếu mở 30 phút mà không gọi món, hoặc 30 phút sau khi đã
+  trả đủ tiền.
+* **Đóng bàn / Mở bàn** ở trang Quản trị là chuyện khác: **ngừng phục vụ / phục vụ lại** (ví dụ bàn hỏng). Bàn đang có
+  khách thì không đóng được.
+
+---
+
+## 13. Thanh toán: tiền mặt và VNPay
+
+Thanh toán theo **cả bàn**. Số tiền **luôn do server tự tính** từ MySQL (tổng các món không bị huỷ trừ phần đã trả),
+không tin con số điện thoại gửi lên.
+
+* Khách bấm **Thanh toán** → server tạo một "lần thanh toán đang chờ", hết hạn sau 15 phút. Trong lúc chờ, bàn không
+  gọi thêm món được (muốn gọi thêm thì huỷ thanh toán).
+* **Mỗi bàn chỉ có một lần đang chờ**: hai người cùng bàn bấm "Thanh toán" cùng lúc thì MySQL chỉ cho tạo một lần
+  (ràng buộc `UNIQUE`); người sau nhận lại đúng lần đó kèm thông báo "Bạn cùng bàn đang thanh toán".
+* Server báo tin `PAYMENT_UPDATED` vào **kênh bàn** (điện thoại khách) và **kênh thu ngân** (`/topic/cashier`).
+
+### 13.1. Tiền mặt
+
+Khách ra quầy trả tiền → thu ngân bấm **Đã nhận tiền**. Hai thu ngân cùng bấm thì chỉ một người thành công, người kia
+nhận `409` (cùng kiểu khoá lạc quan `version` như món ăn ở bếp).
+
+### 13.2. VNPay (môi trường thử – sandbox)
+
+VNPay là **một server khác** (của cổng thanh toán). Có ba "đường" thông tin:
+
+```text
+Điện thoại khách           Server của mình                       Server VNPay
+  │ Thanh toán VNPay ───────▶│ tạo link thanh toán có CHỮ KÝ          │
+  │◀── link ─────────────────│                                        │
+  │── mở trang VNPay, nhập thẻ test ─────────────────────────────────▶│
+  │                          │◀── (1) IPN: "giao dịch X thành công" ──│  server gọi server
+  │                          │    kiểm chữ ký + số tiền → ghi ĐÃ TRẢ  │
+  │                          │──── "00: đã nhận" ────────────────────▶│
+  │◀── (2) VNPay chuyển trình duyệt về Return URL (cũng có chữ ký) ───│
+  │─────────────────────────▶│ kiểm chữ ký → đưa về trang gọi món      │
+  │◀═ "Bàn đã thanh toán đủ" (WebSocket) ═│                            │
+  │                          │── (3) quá hạn mà chưa có tin: hỏi lại ─▶│  tra cứu querydr
+```
+
+* **IPN** (Instant Payment Notification) là **server VNPay gọi thẳng server mình**, không đi qua điện thoại khách. Nhờ
+  vậy khách lỡ tắt trình duyệt giữa chừng thì tiền vẫn được ghi nhận.
+* **Chữ ký (HMAC-SHA512)**: VNPay và server mình cùng biết một **khoá bí mật**. Dữ liệu gửi qua lại kèm một "chữ ký"
+  tính từ dữ liệu và khoá đó. Server tự tính lại chữ ký; khớp thì tin, không khớp thì từ chối (mã `97`). Ai sửa số tiền
+  trên đường đi mà không có khoá thì chữ ký sai ngay.
+
+> Ví dụ đời thường: giống **con dấu giáp lai** trên giấy tờ. Chỉ người có con dấu thật mới đóng được; sửa nội dung thì
+> dấu không còn khớp.
+
+* **Gọi lặp không sao (idempotent)**: VNPay có thể gửi IPN nhiều lần. Lần đầu server ghi "đã trả" (`00`); các lần sau
+  server thấy đã ghi rồi thì trả `02` ("đã xử lý"), **không cộng tiền hai lần**.
+* **Return URL** là trang mà VNPay chuyển trình duyệt khách về sau khi trả. Dữ liệu trên đó cũng có chữ ký, nên dùng
+  được làm đường dự phòng khi IPN bị lạc.
+* **Tra cứu (querydr)**: nếu sau 15 phút vẫn chưa có tin, server tự **hỏi lại VNPay** trước khi cho lần thanh toán hết hạn.
+* Mã cửa hàng và khoá bí mật chỉ đặt bằng **biến môi trường** (`VNPAY_TMN_CODE`, `VNPAY_HASH_SECRET`), không ghi vào
+  code. Thiếu thì trang khách ẩn nút VNPay, chỉ còn tiền mặt.
+
+(File: `payment/PaymentService.java`, `payment/VnpayGateway.java`, `payment/CashierService.java`; trang thu ngân
+`source/client/src/pages/Cashier.jsx`.)
+
+---
+
+## 14. Bảng thuật ngữ
 
 | Thuật ngữ | Giải thích một câu |
 |---|---|
@@ -333,5 +428,12 @@ Tóm lại:
 | Idempotency-Key | Mã riêng của một lần đặt món, gửi lại không bị trùng |
 | Token | "Thẻ ra vào" chứng minh bạn đã đăng nhập |
 | Tunnel | Chương trình đưa server trên laptop ra một địa chỉ công khai trên Internet |
+| Phiên bàn | Một lượt khách ngồi bàn, tự mở khi quét QR, kết thúc khi thu ngân bấm "Trả bàn" |
+| Đơn chung | Mọi điện thoại cùng phiên thấy tất cả đơn của bàn, ghi tên người đặt |
+| `/topic/cashier` | Kênh STOMP của quầy thu ngân (chỉ thu ngân và quản trị được nghe) |
+| IPN | Server cổng thanh toán gọi thẳng server mình để báo kết quả giao dịch |
+| Return URL | Trang mà cổng thanh toán đưa trình duyệt khách quay về sau khi trả tiền |
+| HMAC-SHA512 / chữ ký | "Con dấu" tính từ dữ liệu + khoá bí mật; sửa dữ liệu là chữ ký không khớp |
+| querydr | API tra cứu của VNPay: server hỏi lại trạng thái thật của một giao dịch |
 
-Muốn đọc sâu hơn (thread, định dạng lỗi đầy đủ, câu hỏi bảo vệ): xem [`NETWORK.md`](NETWORK.md).
+Muốn đọc sâu hơn (thread, định dạng lỗi đầy đủ, chi tiết VNPay, câu hỏi bảo vệ): xem [`NETWORK.md`](NETWORK.md).

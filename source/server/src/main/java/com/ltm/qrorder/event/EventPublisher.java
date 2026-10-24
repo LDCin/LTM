@@ -26,6 +26,8 @@ public class EventPublisher {
 
     public static final String KITCHEN_TOPIC = "/topic/kitchen";
     public static final String MENU_TOPIC = "/topic/menu";
+    /** Quầy thu ngân: trạng thái bàn và thanh toán (chỉ CASHIER, ADMIN được nghe). */
+    public static final String CASHIER_TOPIC = "/topic/cashier";
 
     private static final Logger log = LoggerFactory.getLogger(EventPublisher.class);
 
@@ -43,28 +45,23 @@ public class EventPublisher {
         return "/topic/table." + tableId;
     }
 
-    /** Topic riêng của một thiết bị khách: chỉ máy đặt đơn mới nhận được trạng thái đơn của mình. */
-    public static String guestTopic(String deviceId) {
-        return "/topic/guest." + deviceId;
-    }
-
     /**
-     * Sự kiện đơn hàng: tới bếp (trừ chế độ POLLING) và tới đúng thiết bị đã đặt đơn.
-     * Không gửi dữ liệu đơn lên topic chung của bàn, để khách khác quét cùng QR không nhận được.
+     * Sự kiện đơn hàng: tới bếp (trừ chế độ POLLING) và tới mọi máy đang ngồi ở bàn đó.
+     * Các máy cùng một phiên dùng chung danh sách đơn; payload không chứa mã thiết bị.
+     * Sau mỗi sự kiện đơn, quầy thu ngân cũng được báo để cập nhật tạm tính của bàn.
      */
-    public void publishOrderEvent(EventEnvelope envelope, String deviceId) {
+    public void publishOrderEvent(EventEnvelope envelope, long tableId) {
         afterCommit(() -> {
             if (props.getDeliveryMode() != DeliveryMode.POLLING) {
                 sendNow(KITCHEN_TOPIC, envelope);
             }
-            if (deviceId != null) {
-                sendNow(guestTopic(deviceId), envelope);
-            }
+            sendNow(tableTopic(tableId), envelope);
+            sendNow(CASHIER_TOPIC, java.util.Map.of("type", "TABLE_STATE_CHANGED", "tableId", tableId));
             metrics.eventsPublished.incrementAndGet();
         });
     }
 
-    /** Thông báo không cần seq (MENU_UPDATED, TABLE_CLOSED, TABLE_SESSION_RESET, CONFIG_CHANGED). */
+    /** Thông báo không cần seq (MENU_UPDATED, TABLE_*, PAYMENT_UPDATED, CONFIG_CHANGED). */
     public void broadcast(String destination, Object payload) {
         afterCommit(() -> sendNow(destination, payload));
     }

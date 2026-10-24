@@ -24,7 +24,7 @@ public class WebConfig implements WebMvcConfigurer {
     public void addInterceptors(InterceptorRegistry registry) {
         // Thứ tự: rate limit trước (rẻ nhất), sau đó mới xác thực
         registry.addInterceptor(rateLimitInterceptor).addPathPatterns("/api/**");
-        registry.addInterceptor(staffAuthInterceptor).addPathPatterns("/api/kitchen/**", "/api/admin/**");
+        registry.addInterceptor(staffAuthInterceptor).addPathPatterns("/api/kitchen/**", "/api/cashier/**", "/api/admin/**");
     }
 
     @Override
@@ -39,7 +39,7 @@ public class WebConfig implements WebMvcConfigurer {
     /** Khi frontend đã build vào static/, các route của React Router trả về index.html. */
     @Controller
     static class SpaForwardController {
-        @GetMapping({"/t/{token}", "/kitchen", "/admin"})
+        @GetMapping({"/t/{token}", "/kitchen", "/cashier", "/admin"})
         public String forward() {
             return "forward:/index.html";
         }

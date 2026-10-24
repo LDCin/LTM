@@ -18,6 +18,9 @@ public class AppProperties {
     private long authTokenTtlMs = 12 * 60 * 60 * 1000L;
     private final RateLimit rateLimit = new RateLimit();
     private final Ws ws = new Ws();
+    private final Session session = new Session();
+    private final Payment payment = new Payment();
+    private final Vnpay vnpay = new Vnpay();
 
     public DeliveryMode getDeliveryMode() { return deliveryMode; }
     public void setDeliveryMode(DeliveryMode deliveryMode) { this.deliveryMode = deliveryMode; }
@@ -33,12 +36,57 @@ public class AppProperties {
     public void setAuthTokenTtlMs(long authTokenTtlMs) { this.authTokenTtlMs = authTokenTtlMs; }
     public RateLimit getRateLimit() { return rateLimit; }
     public Ws getWs() { return ws; }
+    public Session getSession() { return session; }
+    public Payment getPayment() { return payment; }
+    public Vnpay getVnpay() { return vnpay; }
+
+    /** Phiên bàn tự động kết thúc. */
+    public static class Session {
+        private int idleTimeoutMinutes = 30;
+        private int autoCheckoutAfterPaidMinutes = 30;
+
+        public int getIdleTimeoutMinutes() { return idleTimeoutMinutes; }
+        public void setIdleTimeoutMinutes(int idleTimeoutMinutes) { this.idleTimeoutMinutes = idleTimeoutMinutes; }
+        public int getAutoCheckoutAfterPaidMinutes() { return autoCheckoutAfterPaidMinutes; }
+        public void setAutoCheckoutAfterPaidMinutes(int v) { this.autoCheckoutAfterPaidMinutes = v; }
+    }
+
+    public static class Payment {
+        private int expireMinutes = 15;
+
+        public int getExpireMinutes() { return expireMinutes; }
+        public void setExpireMinutes(int expireMinutes) { this.expireMinutes = expireMinutes; }
+    }
+
+    /** Cổng VNPay (sandbox). tmnCode/hashSecret chỉ lấy từ biến môi trường. */
+    public static class Vnpay {
+        private String tmnCode = "";
+        private String hashSecret = "";
+        private String payUrl = "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html";
+        private String apiUrl = "https://sandbox.vnpayment.vn/merchant_webapi/api/transaction";
+        private String publicUrl = "";
+
+        public boolean isConfigured() {
+            return tmnCode != null && !tmnCode.isBlank() && hashSecret != null && !hashSecret.isBlank();
+        }
+
+        public String getTmnCode() { return tmnCode; }
+        public void setTmnCode(String tmnCode) { this.tmnCode = tmnCode; }
+        public String getHashSecret() { return hashSecret; }
+        public void setHashSecret(String hashSecret) { this.hashSecret = hashSecret; }
+        public String getPayUrl() { return payUrl; }
+        public void setPayUrl(String payUrl) { this.payUrl = payUrl; }
+        public String getApiUrl() { return apiUrl; }
+        public void setApiUrl(String apiUrl) { this.apiUrl = apiUrl; }
+        public String getPublicUrl() { return publicUrl; }
+        public void setPublicUrl(String publicUrl) { this.publicUrl = publicUrl; }
+    }
 
     public static class RateLimit {
         private volatile boolean enabled = true;
         private volatile boolean trustForwardedFor = false;
-        private int orderCapacity = 5;
-        private double orderRefillPerMinute = 5;
+        private int orderCapacity = 10;
+        private double orderRefillPerMinute = 10;
         private int apiCapacity = 60;
         private double apiRefillPerSecond = 20;
 

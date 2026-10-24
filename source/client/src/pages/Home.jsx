@@ -10,6 +10,9 @@ export default function Home() {
           <Link className="btn primary" to="/kitchen">
             👨‍🍳 Màn hình bếp
           </Link>
+          <Link className="btn" to="/cashier">
+            💵 Thu ngân (thanh toán, trả bàn)
+          </Link>
           <Link className="btn" to="/admin">
             ⚙️ Quản trị (bàn, QR, thực đơn, giám sát)
           </Link>

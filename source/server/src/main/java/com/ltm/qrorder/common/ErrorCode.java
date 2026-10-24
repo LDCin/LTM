@@ -9,8 +9,14 @@ public enum ErrorCode {
     INVALID_TABLE_TOKEN(HttpStatus.UNAUTHORIZED),
     FORBIDDEN(HttpStatus.FORBIDDEN),
     NOT_FOUND(HttpStatus.NOT_FOUND),
-    TABLE_CLOSED(HttpStatus.CONFLICT),
-    TABLE_HAS_ACTIVE_ORDERS(HttpStatus.CONFLICT),
+    TABLE_CLOSED(HttpStatus.CONFLICT),              // bàn ngừng phục vụ (admin đóng để bảo trì)
+    TABLE_HAS_GUESTS(HttpStatus.CONFLICT),          // admin đóng bàn khi đang có khách
+    SESSION_ENDED(HttpStatus.CONFLICT),             // lượt khách của máy này đã kết thúc (đã trả bàn)
+    PAYMENT_IN_PROGRESS(HttpStatus.CONFLICT),       // bàn đang thanh toán, chưa gọi thêm được
+    CONFIRM_REQUIRED(HttpStatus.CONFLICT),          // thao tác cần xác nhận thêm (VD trả bàn khi chưa trả đủ tiền)
+    NOTHING_TO_PAY(HttpStatus.UNPROCESSABLE_ENTITY),
+    PAYMENT_METHOD_UNAVAILABLE(HttpStatus.UNPROCESSABLE_ENTITY),
+    PAYMENT_PROVIDER_ERROR(HttpStatus.BAD_GATEWAY),
     INVALID_STATE_TRANSITION(HttpStatus.CONFLICT),
     VERSION_CONFLICT(HttpStatus.CONFLICT),
     IDEMPOTENCY_KEY_REUSED(HttpStatus.CONFLICT),

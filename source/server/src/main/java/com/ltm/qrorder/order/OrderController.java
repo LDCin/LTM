@@ -34,25 +34,28 @@ public class OrderController {
     @PostMapping
     public ResponseEntity<OrderDto> placeOrder(@RequestHeader("X-Table-Token") String tableToken,
                                                @RequestHeader(value = DeviceIds.HEADER, required = false) String deviceId,
+                                               @RequestHeader(value = DeviceIds.SESSION_HEADER, required = false) String session,
                                                @RequestHeader(value = "Idempotency-Key", required = false) String key,
                                                @Valid @RequestBody PlaceOrderRequest req) {
-        PlaceOrderResult result = orders.placeOrder(tableToken, deviceId, key, req);
+        PlaceOrderResult result = orders.placeOrder(tableToken, deviceId, DeviceIds.sessionId(session), key, req);
         return ResponseEntity.status(result.replayed() ? HttpStatus.OK : HttpStatus.CREATED)
                 .header("Idempotent-Replayed", String.valueOf(result.replayed()))
                 .body(result.order());
     }
 
-    /** Đơn do chính thiết bị này đặt trong phiên hiện tại của bàn. */
+    /** Mọi đơn của phiên hiện tại (chung cho các máy cùng bàn) + id các đơn do chính máy này đặt. */
     @GetMapping
-    public TableOrdersView myOrders(@RequestHeader("X-Table-Token") String tableToken,
-                                    @RequestHeader(value = DeviceIds.HEADER, required = false) String deviceId) {
-        return orders.ordersForDevice(tableToken, deviceId);
+    public TableOrdersView tableOrders(@RequestHeader("X-Table-Token") String tableToken,
+                                      @RequestHeader(value = DeviceIds.HEADER, required = false) String deviceId,
+                                      @RequestHeader(value = DeviceIds.SESSION_HEADER, required = false) String session) {
+        return orders.ordersForSession(tableToken, deviceId, DeviceIds.sessionId(session));
     }
 
     @PostMapping("/{orderId}/cancel")
     public OrderDto cancel(@RequestHeader("X-Table-Token") String tableToken,
                            @RequestHeader(value = DeviceIds.HEADER, required = false) String deviceId,
+                           @RequestHeader(value = DeviceIds.SESSION_HEADER, required = false) String session,
                            @PathVariable long orderId) {
-        return orders.cancelOrder(tableToken, deviceId, orderId);
+        return orders.cancelOrder(tableToken, deviceId, DeviceIds.sessionId(session), orderId);
     }
 }
