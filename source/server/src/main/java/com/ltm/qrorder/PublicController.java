@@ -1,5 +1,6 @@
 package com.ltm.qrorder;
 
+import com.ltm.qrorder.assistant.AssistantService;
 import com.ltm.qrorder.config.AppProperties;
 import com.ltm.qrorder.menu.MenuDtos.MenuSnapshot;
 import com.ltm.qrorder.menu.MenuService;
@@ -31,8 +32,11 @@ public class PublicController {
     private final TableService tables;
     private final MenuService menu;
     private final PaymentService payments;
+    private final AssistantService assistant;
 
-    public PublicController(AppProperties props, TableService tables, MenuService menu, PaymentService payments) {
+    public PublicController(AppProperties props, TableService tables, MenuService menu, PaymentService payments,
+                            AssistantService assistant) {
+        this.assistant = assistant;
         this.props = props;
         this.tables = tables;
         this.menu = menu;
@@ -46,6 +50,7 @@ public class PublicController {
         m.put("pollingIntervalMs", props.getPollingIntervalMs());
         m.put("heartbeatMs", props.getWs().getHeartbeatMs());
         m.put("paymentMethods", payments.availableMethods());
+        m.put("assistantAi", assistant.aiAvailable());   // false: trợ lý chỉ dùng gợi ý dự phòng
         m.put("serverTime", System.currentTimeMillis());
         return m;
     }

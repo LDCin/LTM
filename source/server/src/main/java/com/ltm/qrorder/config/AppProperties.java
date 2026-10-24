@@ -21,6 +21,7 @@ public class AppProperties {
     private final Session session = new Session();
     private final Payment payment = new Payment();
     private final Vnpay vnpay = new Vnpay();
+    private final Assistant assistant = new Assistant();
 
     public DeliveryMode getDeliveryMode() { return deliveryMode; }
     public void setDeliveryMode(DeliveryMode deliveryMode) { this.deliveryMode = deliveryMode; }
@@ -39,6 +40,7 @@ public class AppProperties {
     public Session getSession() { return session; }
     public Payment getPayment() { return payment; }
     public Vnpay getVnpay() { return vnpay; }
+    public Assistant getAssistant() { return assistant; }
 
     /** Phiên bàn tự động kết thúc. */
     public static class Session {
@@ -56,6 +58,49 @@ public class AppProperties {
 
         public int getExpireMinutes() { return expireMinutes; }
         public void setExpireMinutes(int expireMinutes) { this.expireMinutes = expireMinutes; }
+    }
+
+    /**
+     * Trợ lý gợi ý món (Gemini API). Không có khoá thì trợ lý vẫn chạy bằng gợi ý dự phòng (không dùng AI).
+     * Khoá chỉ lấy từ biến môi trường GEMINI_API_KEY, không ghi vào mã nguồn.
+     */
+    public static class Assistant {
+        private String geminiApiKey = "";
+        private String geminiModel = "gemini-flash-latest";
+        private String geminiUrl = "https://generativelanguage.googleapis.com/v1beta/models";
+        private int timeoutMs = 15000;
+        /** Mỗi bàn: tối đa perTableCapacity câu hỏi liên tiếp, hồi perTableRefillPerMinute câu mỗi phút. */
+        private int perTableCapacity = 5;
+        private double perTableRefillPerMinute = 6;
+        /** Gemini báo hết lượt (429) mà không kèm Retry-After, hoặc lỗi liên tiếp: ngừng gọi trong chừng này giây. */
+        private int cooldownSeconds = 60;
+        /** Số lỗi liên tiếp (timeout, 5xx) trước khi tạm ngừng gọi Gemini. */
+        private int failureThreshold = 3;
+        /** Thực nghiệm: false = chỉ gửi thực đơn tĩnh (baseline), không gửi tồn kho, tải bếp, đơn của bàn. */
+        private volatile boolean liveContext = true;
+
+        public boolean isConfigured() {
+            return geminiApiKey != null && !geminiApiKey.isBlank();
+        }
+
+        public String getGeminiApiKey() { return geminiApiKey; }
+        public void setGeminiApiKey(String geminiApiKey) { this.geminiApiKey = geminiApiKey; }
+        public String getGeminiModel() { return geminiModel; }
+        public void setGeminiModel(String geminiModel) { this.geminiModel = geminiModel; }
+        public String getGeminiUrl() { return geminiUrl; }
+        public void setGeminiUrl(String geminiUrl) { this.geminiUrl = geminiUrl; }
+        public int getTimeoutMs() { return timeoutMs; }
+        public void setTimeoutMs(int timeoutMs) { this.timeoutMs = timeoutMs; }
+        public int getPerTableCapacity() { return perTableCapacity; }
+        public void setPerTableCapacity(int perTableCapacity) { this.perTableCapacity = perTableCapacity; }
+        public double getPerTableRefillPerMinute() { return perTableRefillPerMinute; }
+        public void setPerTableRefillPerMinute(double perTableRefillPerMinute) { this.perTableRefillPerMinute = perTableRefillPerMinute; }
+        public int getCooldownSeconds() { return cooldownSeconds; }
+        public void setCooldownSeconds(int cooldownSeconds) { this.cooldownSeconds = cooldownSeconds; }
+        public int getFailureThreshold() { return failureThreshold; }
+        public boolean isLiveContext() { return liveContext; }
+        public void setLiveContext(boolean liveContext) { this.liveContext = liveContext; }
+        public void setFailureThreshold(int failureThreshold) { this.failureThreshold = failureThreshold; }
     }
 
     /** Cổng VNPay (sandbox). tmnCode/hashSecret chỉ lấy từ biến môi trường. */

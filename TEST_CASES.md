@@ -123,9 +123,22 @@ Chỉ màn hình bếp có nút này. Món chưa nhận vẫn dùng **Từ chố
 
 ---
 
-## 8. Test tự động
+## 8. Trợ lý gợi ý món
+
+Không có `GEMINI_API_KEY` thì mọi câu trả lời là gợi ý dự phòng (có dòng "Trợ lý AI chưa được bật"); xem `SETUP.md` Bước 12.8.
+
+| # | Tình huống | Kết quả đúng | Kết quả |
+|---|---|---|---|
+| 59 | Khách bấm **💬 Gợi ý món** → gõ "2 người, khoảng 150 nghìn, không ăn cay" | Trợ lý trả lời tiếng Việt, kèm thẻ món (tên, giá đúng thực đơn, lý do); tổng tiền các món gợi ý không vượt 150 nghìn | |
+| 60 | Bấm **Thêm vào giỏ** ở một thẻ món | Giỏ hàng tăng đúng số suất; trợ lý **không** tự đặt món | |
+| 61 | Bếp đang có nhiều suất Phở chờ; khách hỏi "món nào ra nhanh?" | Không gợi ý Phở | |
+| 62 | Hỏi dồn dập hơn 5 câu trong một phút | Báo "Bạn hỏi hơi nhanh..."; chờ một lúc lại hỏi được | |
+
+---
+
+## 9. Test tự động
 
 | Lệnh | Kỳ vọng |
 |---|---|
-| `cd source/server` → `mvn test` | `Tests run: 24, Failures: 0, Errors: 0` |
-| Server đang chạy → `cd source/loadtest` → `npm run e2e` | `KẾT QUẢ: 205 đạt, 0 lỗi` (18 nhóm) |
+| `cd source/server` → `mvn test` | `Tests run: 29, Failures: 0, Errors: 0` |
+| Server đang chạy → `cd source/loadtest` → `npm run e2e` | `KẾT QUẢ: 212 đạt, 0 lỗi` (19 nhóm) |

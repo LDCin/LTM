@@ -20,6 +20,10 @@ public class Metrics {
     public final AtomicLong paymentsCreated = new AtomicLong();
     public final AtomicLong paymentsPaid = new AtomicLong();
     public final AtomicLong sessionsAutoEnded = new AtomicLong();
+    public final AtomicLong assistantRequests = new AtomicLong();
+    public final AtomicLong assistantAiReplies = new AtomicLong();
+    public final AtomicLong assistantFallbacks = new AtomicLong();
+    public final AtomicLong assistantSuggestionsDropped = new AtomicLong();
 
     public Map<String, Long> snapshot() {
         Map<String, Long> m = new LinkedHashMap<>();
@@ -33,6 +37,10 @@ public class Metrics {
         m.put("paymentsCreated", paymentsCreated.get());
         m.put("paymentsPaid", paymentsPaid.get());
         m.put("sessionsAutoEnded", sessionsAutoEnded.get());
+        m.put("assistantRequests", assistantRequests.get());
+        m.put("assistantAiReplies", assistantAiReplies.get());
+        m.put("assistantFallbacks", assistantFallbacks.get());
+        m.put("assistantSuggestionsDropped", assistantSuggestionsDropped.get());
         return m;
     }
 }

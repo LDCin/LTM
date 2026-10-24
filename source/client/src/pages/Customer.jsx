@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import ConnectionBadge from '../components/ConnectionBadge.jsx';
+import AssistantChat from '../components/AssistantChat.jsx';
 import { ApiError, isRetryable, newIdempotencyKey, request, withRetry, wsUrl } from '../lib/api.js';
 import { RealtimeConnection } from '../lib/connection.js';
 import { ITEM_STATUS, VOID_REASON, categoryIcon, formatVnd, mergeOrder } from '../lib/format.js';
@@ -748,6 +749,18 @@ export default function Customer() {
           </form>
         </div>
       )}
+
+      <AssistantChat
+        token={token}
+        sessionId={sessionId}
+        itemsById={itemsById}
+        canOrder={canOrder}
+        onAdd={(item, qty) => {
+          changeQty(item, qty);
+          notify(`Đã thêm ${qty}× ${item.name} vào giỏ`);
+        }}
+        onError={handleError}
+      />
 
       {toast && <div className="toast">{toast.text}</div>}
     </div>
