@@ -412,7 +412,8 @@ Luồng thử 2 phút:
    cần huỷ (hết nguyên liệu, làm hỏng) hoặc khách trả lại: bếp bấm **Huỷ** ở món (món đã phục vụ thì mở **🍽 Món đã phục vụ**),
    chọn số suất và lý do; món huỷ không tính tiền.
 5. Trên màn hình bếp bấm **Giả lập mất mạng 5s**, trong lúc đó đặt thêm một đơn: khi bếp kết nối lại, đơn vẫn hiện
-   và thanh thống kê có **Gửi bù**.
+   (F12 → **Network** → **WS** → chọn kết nối `/ws` → **Messages**: thấy frame gửi `/app/resume` và frame nhận `REPLAY_BATCH`
+   chứa đơn bị lỡ).
 6. Mở trang Thu ngân (cửa sổ ẩn danh khác). Trên trang khách bấm **🙋 Gọi phục vụ**: trang Thu ngân kêu "ting", hiện
    khung đỏ "Khách gọi phục vụ" và ô bàn nhấp nháy. Lễ tân điều phối nhân viên qua bộ đàm rồi bấm **Đã xử lý**: điện
    thoại khách hiện "Nhân viên đã nhận yêu cầu và đang tới bàn bạn".

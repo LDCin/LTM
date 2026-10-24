@@ -652,7 +652,7 @@ Khởi động server; mở `http://<IP-LAN>:8080/admin`, đăng nhập `admin`/
 
 ### Step 3
 
-Trên màn hình bếp bấm **"Giả lập mất mạng 5s"**, trong lúc đó đặt thêm món từ điện thoại; khi bếp kết nối lại, các đơn bị lỡ được gửi bù (thanh thống kê hiện số "Gửi bù"). Ở trang quản trị đổi chế độ sang `NAIVE_PUSH` và lặp lại để thấy đơn bị mất; đổi về `RELIABLE_PUSH` sau khi demo.
+Trên màn hình bếp bấm **"Giả lập mất mạng 5s"**, trong lúc đó đặt thêm món từ điện thoại; khi bếp kết nối lại, các đơn bị lỡ được gửi bù (xem bằng F12 → Network → WS: frame `/app/resume` và `REPLAY_BATCH`). Ở trang quản trị đổi chế độ sang `NAIVE_PUSH` và lặp lại để thấy đơn bị mất; đổi về `RELIABLE_PUSH` sau khi demo.
 
 ---
 

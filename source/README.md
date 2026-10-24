@@ -143,7 +143,7 @@ npm run e2e
 - Database cũ được tự nâng cấp khi server khởi động (`SchemaMigrator`).
 
 Kiểm thử thủ công tính năng chịu lỗi: trên màn hình bếp bấm **"Giả lập mất mạng 5s"** trong lúc đặt món từ điện thoại.
-Sau khi kết nối lại, bếp tự gửi RESUME và nhận bù các đơn bị lỡ (thanh thống kê hiện số "Gửi bù").
+Sau khi kết nối lại, bếp tự gửi RESUME và nhận bù các đơn bị lỡ (xem bằng F12 → Network → WS: frame `/app/resume` và `REPLAY_BATCH`).
 
 ## 7. Thực nghiệm
 
