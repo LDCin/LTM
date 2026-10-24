@@ -72,7 +72,7 @@ app:
   assistant:
     # Trợ lý gợi ý món: khoá Gemini API (Google AI Studio, hạng miễn phí). Trống thì chỉ dùng gợi ý dự phòng.
     gemini-api-key: ${GEMINI_API_KEY:}
-    gemini-model: ${GEMINI_MODEL:gemini-flash-latest}
+    gemini-model: ${GEMINI_MODEL:gemini-flash-lite-latest}
     timeout-ms: 15000
     per-table-capacity: 5            # mỗi bàn hỏi tối đa 5 câu liên tiếp...
     per-table-refill-per-minute: 6   # ...hồi 6 câu mỗi phút (hạng free của Gemini giới hạn số request/phút)

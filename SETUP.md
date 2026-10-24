@@ -616,7 +616,7 @@ tự đặt món). Không có khoá thì trợ lý vẫn chạy bằng **gợi �
 1. Vào https://aistudio.google.com, đăng nhập tài khoản Google → **Get API key** → **Create API key** (hạng miễn phí,
    không cần gói Gemini / ChatGPT trả phí; các gói đó không dùng được cho API).
 2. Thêm vào ô **Environment variables** ở Bước 7.3: `GEMINI_API_KEY=<khoá vừa tạo>` (**không** ghi khoá vào file trong
-   dự án). Tuỳ chọn: `GEMINI_MODEL=<tên model>` nếu muốn đổi model, mặc định `gemini-flash-latest`.
+   dự án). Tuỳ chọn: `GEMINI_MODEL=<tên model>` nếu muốn đổi model, mặc định `gemini-flash-lite-latest`.
 3. Chạy lại server. Máy chủ phải có Internet để gọi Gemini.
 
 * Hạng miễn phí giới hạn số request mỗi phút / mỗi ngày (xem trong AI Studio). Server tự giới hạn mỗi bàn 5 câu hỏi

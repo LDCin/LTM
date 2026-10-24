@@ -1201,7 +1201,7 @@ Thời gian lưu dưới dạng epoch mili-giây (BIGINT). Tên món và giá đ
 | `app.vnpay.tmn-code` / `hash-secret` | khoá **sandbox** của nhóm; biến môi trường `VNPAY_TMN_CODE` / `VNPAY_HASH_SECRET` ghi đè | Để trống thì ẩn VNPay; khoá production không ghi vào file |
 | `app.vnpay.pay-url` / `api-url` | sandbox của VNPay | Trang thanh toán / API `querydr` |
 | `app.vnpay.public-url` | biến môi trường `APP_PUBLIC_URL`, mặc định trống | Địa chỉ công khai để tạo Return URL; trống thì lấy theo request |
-| `app.assistant.gemini-api-key` / `gemini-model` | biến môi trường `GEMINI_API_KEY` (mặc định trống) / `GEMINI_MODEL` (mặc định `gemini-flash-latest`) | Trống thì trợ lý chỉ dùng gợi ý dự phòng; khoá không ghi vào file |
+| `app.assistant.gemini-api-key` / `gemini-model` | biến môi trường `GEMINI_API_KEY` (mặc định trống) / `GEMINI_MODEL` (mặc định `gemini-flash-lite-latest`) | Trống thì trợ lý chỉ dùng gợi ý dự phòng; khoá không ghi vào file |
 | `app.assistant.per-table-capacity` / `per-table-refill-per-minute` | `5` / `6` | Giới hạn câu hỏi mỗi bàn |
 | `app.assistant.timeout-ms`, `cooldown-seconds`, `failure-threshold` | `15000`, `60`, `3` | Timeout mỗi lần gọi Gemini; thời gian ngừng gọi khi hết lượt / lỗi liên tiếp; số lỗi liên tiếp trước khi ngừng gọi |
 | `server.tomcat.threads.max` / `max-connections` / `accept-count` | `200` / `2000` / `100` | |
