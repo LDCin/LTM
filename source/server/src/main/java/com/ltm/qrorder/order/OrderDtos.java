@@ -36,10 +36,23 @@ public final class OrderDtos {
     public record UpdateStatusRequest(@NotNull OrderItemStatus status, @NotNull Integer version) {
     }
 
+    /** Lý do bếp huỷ / ghi nhận khách trả lại một món đã nhận. */
+    public enum VoidReason { OUT_OF_STOCK, KITCHEN_MISTAKE, CUSTOMER_CHANGED_MIND, RETURNED, OTHER }
+
+    /**
+     * Bếp huỷ hoặc ghi nhận khách trả lại món đã nhận. quantity nhỏ hơn số suất của dòng -> chỉ huỷ một phần
+     * (dòng cũ giảm số suất, phần huỷ tách thành dòng mới trạng thái CANCELLED). Lý do OTHER phải có note.
+     */
+    public record VoidItemRequest(@NotNull @Min(1) @Max(50) Integer quantity, @NotNull VoidReason reason,
+                                  @Size(max = 200) String note, @NotNull Integer version) {
+    }
+
     // ------------------------------------------------------------ response
 
+    /** cancelReason / cancelNote / cancelledBy: chỉ có khi món bị bếp huỷ hoặc khách trả lại sau khi bếp đã nhận. */
     public record OrderItemDto(long id, long orderId, long menuItemId, String name, long unitPrice, int quantity,
-                               String note, String status, int version, String station, long updatedAt) {
+                               String note, String status, int version, String station, long updatedAt,
+                               String cancelReason, String cancelNote, String cancelledBy) {
     }
 
     /**

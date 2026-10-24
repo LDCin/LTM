@@ -26,7 +26,7 @@ import java.util.Map;
 /**
  * Quầy thu ngân: sơ đồ bàn, "Trả bàn" (kết thúc phiên), và các tác vụ tự động:
  *  - phiên mở mà không gọi món quá idle-timeout -> tự kết thúc (AUTO_IDLE);
- *  - đã trả đủ tiền, món đã phục vụ hết, quá auto-checkout-after-paid mà chưa ai bấm "Trả bàn" -> tự trả bàn;
+ *  - đã trả đúng đủ tiền (không thừa: thừa thì chờ thu ngân trả lại khách), món đã phục vụ hết, quá auto-checkout-after-paid mà chưa ai bấm "Trả bàn" -> tự trả bàn;
  *  - lần thanh toán quá hạn -> hỏi lại VNPay rồi EXPIRED.
  */
 @Service
@@ -69,7 +69,7 @@ public class CashierService {
     CashierTableView view(TableInfo t) {
         if (!t.hasSession()) {
             return new CashierTableView(t.id(), t.code(), t.inService(), null, null,
-                    t.inService() ? "EMPTY" : "OUT_OF_SERVICE", 0, 0, 0, 0, 0, null, null, false, null);
+                    t.inService() ? "EMPTY" : "OUT_OF_SERVICE", 0, 0, 0, 0, 0, null, null, false, null, 0);
         }
         long sessionId = t.sessionId();
         long total = payments.sessionTotal(sessionId);
@@ -78,6 +78,8 @@ public class CashierService {
         String state;
         if (pending != null) {
             state = "AWAITING_PAYMENT";
+        } else if (paid > total) {
+            state = "REFUND_DUE";
         } else if (total > 0 && total - paid <= 0) {
             state = "PAID";
         } else {
@@ -86,7 +88,8 @@ public class CashierService {
         return new CashierTableView(t.id(), t.code(), t.inService(), sessionId, tables.sessionOpenedAt(sessionId),
                 state, total, paid, total - paid, orders.countOrdersInSession(sessionId),
                 orders.countActiveItemsInSession(sessionId), pending, payments.lastPaidAt(sessionId),
-                payments.sessionNeedsRefund(sessionId), serviceCalls.findOpen(sessionId).orElse(null));
+                payments.sessionNeedsRefund(sessionId), serviceCalls.findOpen(sessionId).orElse(null),
+                Math.max(0, paid - total));
     }
 
     /**
@@ -105,6 +108,11 @@ public class CashierService {
             throw new ApiException(ErrorCode.PAYMENT_IN_PROGRESS,
                     "Bàn " + t.code() + " đang có lần thanh toán chờ, hãy xác nhận hoặc huỷ trước khi trả bàn");
         }
+        if (v.refundDue() > 0 && (req == null || !Boolean.TRUE.equals(req.refundReturned()))) {
+            throw new ApiException(ErrorCode.CONFIRM_REQUIRED,
+                    "Bàn " + t.code() + " cần trả lại khách " + v.refundDue() + "đ (món bị huỷ sau khi đã thanh toán)."
+                            + " Xác nhận đã trả lại tiền để trả bàn", Map.of("refundDue", v.refundDue()));
+        }
         CheckoutReason reason = req == null || req.reason() == null ? CheckoutReason.CHECKOUT : req.reason();
         if (reason == CheckoutReason.CHECKOUT && (v.remaining() > 0 || v.activeItemCount() > 0)) {
             Map<String, Object> details = new LinkedHashMap<>();
@@ -115,7 +123,15 @@ public class CashierService {
                             + (v.activeItemCount() > 0 ? " còn " + v.activeItemCount() + " món chưa phục vụ" : "")
                             + ". Chọn lý do để vẫn trả bàn", details);
         }
-        tables.endSession(tableId, t.sessionId(), reason.name(), req == null ? null : req.note(), staff.username());
+        String note = req == null ? null : req.note();
+        if (v.refundDue() > 0) {
+            String refundNote = "Đã trả lại khách " + v.refundDue() + "đ";
+            note = note == null || note.isBlank() ? refundNote : note + "; " + refundNote;
+            if (note.length() > 200) {   // cột end_note tối đa 200 ký tự: giữ phần ghi chú về tiền ở cuối
+                note = note.substring(note.length() - 200);
+            }
+        }
+        tables.endSession(tableId, t.sessionId(), reason.name(), note, staff.username());
         return view(tables.get(tableId));
     }
 
@@ -152,7 +168,7 @@ public class CashierService {
                 long total = payments.sessionTotal(sessionId);
                 long paid = payments.sessionPaid(sessionId, null);
                 Long lastPaid = payments.lastPaidAt(sessionId);
-                if (total > 0 && total - paid <= 0 && lastPaid != null && now - lastPaid > afterPaidMs
+                if (total > 0 && total == paid && lastPaid != null && now - lastPaid > afterPaidMs
                         && orders.countActiveItemsInSession(sessionId) == 0) {
                     ok = tables.endSession(tableId, sessionId, "AUTO_AFTER_PAID", "Tự trả bàn sau khi thanh toán", "system");
                 }

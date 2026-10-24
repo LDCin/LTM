@@ -22,6 +22,8 @@ import com.ltm.qrorder.order.OrderDtos.PlaceOrderResult;
 import com.ltm.qrorder.order.OrderDtos.TableOrdersView;
 import com.ltm.qrorder.order.OrderDtos.TableView;
 import com.ltm.qrorder.order.OrderDtos.UpdateStatusRequest;
+import com.ltm.qrorder.order.OrderDtos.VoidItemRequest;
+import com.ltm.qrorder.order.OrderDtos.VoidReason;
 import com.ltm.qrorder.order.OrderRepository.ItemRow;
 import com.ltm.qrorder.table.TableInfo;
 import com.ltm.qrorder.table.TableService;
@@ -246,6 +248,96 @@ public class OrderService {
         EventEnvelope envelope = events.append(current.orderId(), row.tableId(), "ITEM_STATUS_CHANGED", payload);
         publisher.publishOrderEvent(envelope, row.tableId());
         return item;
+    }
+
+    // ================================================================ BẾP HUỶ / KHÁCH TRẢ LẠI MÓN ĐÃ NHẬN
+
+    /**
+     * Bếp huỷ món đã nhận (hết nguyên liệu, làm hỏng...) hoặc ghi nhận khách trả lại món đã phục vụ.
+     * - Chỉ cho món ACCEPTED / COOKING / READY / SERVED (món PENDING dùng "Từ chối" như cũ).
+     * - Huỷ một phần: dòng cũ bớt số suất, phần huỷ thành dòng mới CANCELLED. Cả hai bước nằm trong một transaction
+     *   và dòng cũ được khoá lạc quan theo version, nên hai người cùng huỷ thì chỉ một người thành công.
+     * - Món huỷ không tính tiền (tổng hóa đơn tính theo món chưa huỷ). Bàn đã trả tiền thì phần dư hiện ở quầy
+     *   thu ngân là "cần trả lại khách".
+     * - Món chưa bắt đầu nấu (ACCEPTED) thì hoàn lại tồn kho.
+     * - Đang có lần thanh toán chờ -> 409 PAYMENT_IN_PROGRESS (số tiền của lần đó đã chốt).
+     * Sự kiện ORDER_UPDATED (cả đơn mới nhất) tới bếp, các máy của bàn và quầy thu ngân.
+     */
+    public OrderDto voidItem(long itemId, VoidItemRequest req, StaffPrincipal staff) {
+        if (req.reason() == VoidReason.OTHER && (req.note() == null || req.note().isBlank())) {
+            throw new ApiException(ErrorCode.INVALID_REQUEST, "Lý do khác: vui lòng ghi rõ lý do");
+        }
+        try {
+            return tx.execute(status -> doVoidItem(itemId, req, staff));
+        } catch (ConcurrencyFailureException e) {
+            metrics.versionConflicts.incrementAndGet();
+            throw new ApiException(ErrorCode.VERSION_CONFLICT, "Món vừa được người khác cập nhật, vui lòng tải lại");
+        }
+    }
+
+    private OrderDto doVoidItem(long itemId, VoidItemRequest req, StaffPrincipal staff) {
+        ItemRow row = orders.findItem(itemId)
+                .orElseThrow(() -> new ApiException(ErrorCode.NOT_FOUND, "Không tìm thấy món #" + itemId));
+        OrderItemDto current = row.item();
+        OrderItemStatus from = OrderItemStatus.valueOf(current.status());
+        if (current.version() != req.version()) {
+            throw versionConflict(current);
+        }
+        if (from == OrderItemStatus.PENDING || from == OrderItemStatus.CANCELLED) {
+            throw new ApiException(ErrorCode.INVALID_STATE_TRANSITION,
+                    from == OrderItemStatus.PENDING ? "Món chưa nhận: dùng nút Từ chối" : "Món đã huỷ rồi",
+                    Map.of("from", from.name()));
+        }
+        if (req.quantity() > current.quantity()) {
+            throw new ApiException(ErrorCode.INVALID_REQUEST,
+                    "Dòng này chỉ có " + current.quantity() + " suất", Map.of("quantity", current.quantity()));
+        }
+        OrderDto order = orders.findOrder(current.orderId()).orElseThrow();
+        if (orders.hasPendingPayment(order.sessionId())) {
+            throw new ApiException(ErrorCode.PAYMENT_IN_PROGRESS,
+                    "Bàn " + row.tableCode() + " đang thanh toán: nhờ thu ngân huỷ lần thanh toán chờ rồi huỷ món",
+                    Map.of("tableCode", row.tableCode()));
+        }
+
+        long now = System.currentTimeMillis();
+        String note = normalizeNote(req.note());
+        String reason = req.reason().name();
+        int updated = req.quantity() == current.quantity()
+                ? orders.voidItem(itemId, req.version(), reason, note, staff.username(), now)
+                : orders.reduceQuantity(itemId, req.version(), req.quantity(), now);
+        if (updated == 0) {
+            throw versionConflict(current);
+        }
+        if (req.quantity() < current.quantity()) {
+            orders.insertCancelledPart(itemId, req.quantity(), reason, note, staff.username(), now);
+        }
+        boolean stockRestored = from == OrderItemStatus.ACCEPTED
+                && menu.restoreStock(current.menuItemId(), req.quantity());
+        orders.recomputeOrderTotal(current.orderId(), now);
+        OrderStatus orderStatus = OrderStatus.derive(orders.itemStatuses(current.orderId()));
+        orders.updateOrderStatus(current.orderId(), orderStatus.name(), now);
+
+        OrderDto updatedOrder = orders.findOrder(current.orderId()).orElseThrow();
+        Map<String, Object> change = new LinkedHashMap<>();
+        change.put("orderItemId", itemId);
+        change.put("name", current.name());
+        change.put("quantity", req.quantity());
+        change.put("from", from.name());
+        change.put("reason", reason);
+        change.put("note", note);
+        change.put("by", staff.username());
+        EventEnvelope envelope = events.append(current.orderId(), row.tableId(), "ORDER_UPDATED",
+                Map.of("order", updatedOrder, "change", change));
+        publisher.publishOrderEvent(envelope, row.tableId());
+        if (stockRestored) {
+            menu.markChanged();
+        }
+        return updatedOrder;
+    }
+
+    /** Đơn có món đã phục vụ của các bàn đang có khách (bếp ghi nhận khách trả lại món). */
+    public List<OrderDto> servedInOpenSessions() {
+        return orders.findServedInOpenSessions();
     }
 
     private ApiException versionConflict(OrderItemDto current) {

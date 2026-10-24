@@ -189,6 +189,8 @@ label { display: flex; flex-direction: column; gap: 6px; font-size: 0.9rem; colo
 .state-AWAITING_PAYMENT .state { color: #d9480f; }
 .state-PAID { border-color: #74c0fc; background: #f1f8ff; }
 .state-PAID .state { color: var(--info); }
+.state-REFUND_DUE { border-color: #f1b0b0; background: #fff4f4; }
+.state-REFUND_DUE .state { color: var(--danger); }
 .state-OUT_OF_SERVICE { opacity: 0.55; background: #f1f1f1; }
 .cashier-card .money { font-size: 1.1rem; font-weight: 600; }
 .cashier-card .refund { color: var(--danger); font-size: 0.8rem; font-weight: 600; }
@@ -200,3 +202,11 @@ label { display: flex; flex-direction: column; gap: 6px; font-size: 0.9rem; colo
 .service-call { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .service-call .who { flex: 1; min-width: 160px; }
 .cashier-legend { display: flex; flex-wrap: wrap; gap: 12px; padding: 0 20px; font-size: 0.85rem; color: var(--muted); }
+.void-dialog { max-width: 460px; }
+.void-dialog p { margin: 0; }
+.void-reasons { display: flex; flex-direction: column; gap: 6px; }
+.void-reasons .radio { flex-direction: row; align-items: center; gap: 8px; color: var(--text); font-size: 0.95rem; }
+.qty-row { display: flex; align-items: center; gap: 10px; }
+.served-list { max-width: 560px; }
+.served-order { border-top: 1px solid var(--line); padding-top: 8px; }
+.void-reason { color: var(--danger); }

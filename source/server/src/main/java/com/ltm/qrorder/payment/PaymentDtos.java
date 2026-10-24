@@ -31,7 +31,8 @@ public final class PaymentDtos {
     public record ConfirmPaymentRequest(@NotNull Integer version) {
     }
 
-    public record CheckoutRequest(CheckoutReason reason, @Size(max = 200) String note) {
+    /** refundReturned: thu ngân xác nhận đã trả lại khách phần tiền dư (bàn có món bị huỷ sau khi đã thanh toán). */
+    public record CheckoutRequest(CheckoutReason reason, @Size(max = 200) String note, Boolean refundReturned) {
     }
 
     // ------------------------------------------------------------ response
@@ -61,11 +62,12 @@ public final class PaymentDtos {
 
     /**
      * Một ô trên sơ đồ bàn của thu ngân.
-     * state: OUT_OF_SERVICE | EMPTY | DINING | AWAITING_PAYMENT | PAID.
+     * state: OUT_OF_SERVICE | EMPTY | DINING | AWAITING_PAYMENT | PAID | REFUND_DUE.
+     * refundDue: số tiền khách đã trả dư cần trả lại (VD bếp huỷ món sau khi bàn đã thanh toán).
      */
     public record CashierTableView(long id, String code, boolean inService, Long sessionId, Long sessionOpenedAt,
                                    String state, long total, long paid, long remaining, long orderCount,
                                    long activeItemCount, PaymentDto pending, Long lastPaidAt, boolean needsRefund,
-                                   ServiceCallDto serviceCall) {
+                                   ServiceCallDto serviceCall, long refundDue) {
     }
 }

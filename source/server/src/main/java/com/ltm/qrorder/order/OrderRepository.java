@@ -19,11 +19,13 @@ import java.util.Optional;
 public class OrderRepository {
 
     private static final String ITEM_COLUMNS =
-            "i.id, i.order_id, i.menu_item_id, i.name, i.unit_price, i.quantity, i.note, i.status, i.version, i.station, i.updated_at";
+            "i.id, i.order_id, i.menu_item_id, i.name, i.unit_price, i.quantity, i.note, i.status, i.version, i.station, i.updated_at, " +
+                    "i.cancel_reason, i.cancel_note, i.cancelled_by";
     private static final RowMapper<OrderItemDto> ITEM_MAPPER = (rs, n) -> new OrderItemDto(
             rs.getLong("id"), rs.getLong("order_id"), rs.getLong("menu_item_id"), rs.getString("name"),
             rs.getLong("unit_price"), rs.getInt("quantity"), rs.getString("note"), rs.getString("status"),
-            rs.getInt("version"), rs.getString("station"), rs.getLong("updated_at"));
+            rs.getInt("version"), rs.getString("station"), rs.getLong("updated_at"), rs.getString("cancel_reason"),
+            rs.getString("cancel_note"), rs.getString("cancelled_by"));
 
     private record OrderRow(long id, long tableId, String tableCode, long sessionId, String status, long total,
                             long createdAt, String guestName, boolean firstInSession) {
@@ -177,6 +179,41 @@ public class OrderRepository {
 
     public void updateOrderStatus(long orderId, String status, long now) {
         jdbc.update("UPDATE orders SET status = ?, updated_at = ? WHERE id = ?", status, now, orderId);
+    }
+
+    /** Huỷ cả dòng món (bếp huỷ / khách trả lại). @return 0 nếu version đã bị đổi. */
+    public int voidItem(long itemId, int expectedVersion, String reason, String note, String by, long now) {
+        return jdbc.update("UPDATE order_item SET status = 'CANCELLED', version = version + 1, updated_at = ?, " +
+                        "cancel_reason = ?, cancel_note = ?, cancelled_by = ? WHERE id = ? AND version = ?",
+                now, reason, note, by, itemId, expectedVersion);
+    }
+
+    /** Huỷ một phần: bớt số suất của dòng (dòng vẫn giữ trạng thái). @return 0 nếu version đã bị đổi. */
+    public int reduceQuantity(long itemId, int expectedVersion, int by, long now) {
+        return jdbc.update("UPDATE order_item SET quantity = quantity - ?, version = version + 1, updated_at = ? " +
+                "WHERE id = ? AND version = ? AND quantity > ?", by, now, itemId, expectedVersion, by);
+    }
+
+    /** Phần bị huỷ của một dòng: thêm dòng mới (cùng món, cùng giá) ở trạng thái CANCELLED kèm lý do. */
+    public void insertCancelledPart(long itemId, int quantity, String reason, String note, String by, long now) {
+        jdbc.update("INSERT INTO order_item (order_id, menu_item_id, name, unit_price, quantity, note, status, version, " +
+                        "station, updated_at, cancel_reason, cancel_note, cancelled_by) " +
+                        "SELECT order_id, menu_item_id, name, unit_price, ?, note, 'CANCELLED', 0, station, ?, ?, ?, ? " +
+                        "FROM order_item WHERE id = ?",
+                quantity, now, reason, note, by, itemId);
+    }
+
+    /** Tính lại tổng tiền của đơn theo các món chưa huỷ. */
+    public void recomputeOrderTotal(long orderId, long now) {
+        jdbc.update("UPDATE orders SET total = (SELECT COALESCE(SUM(unit_price * quantity), 0) FROM order_item " +
+                "WHERE order_id = ? AND status <> 'CANCELLED'), updated_at = ? WHERE id = ?", orderId, now, orderId);
+    }
+
+    /** Các đơn có món đã phục vụ của những bàn đang có khách (để bếp ghi nhận khách trả lại món). */
+    public List<OrderDto> findServedInOpenSessions() {
+        return loadWithItems("JOIN restaurant_table ts ON ts.current_session_id = o.session_id " +
+                "WHERE EXISTS (SELECT 1 FROM order_item s WHERE s.order_id = o.id AND s.status = 'SERVED') " +
+                "ORDER BY o.created_at DESC, o.id DESC LIMIT " + MAX_ACTIVE_ORDERS);
     }
 
     /** Huỷ các món còn PENDING; trả về số món đã huỷ. */

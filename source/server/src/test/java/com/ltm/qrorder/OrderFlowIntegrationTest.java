@@ -299,6 +299,102 @@ class OrderFlowIntegrationTest {
                 JsonNode.class).getStatusCode().value(), "phiên đã kết thúc không gọi được");
     }
 
+    // ================================================================ bếp huỷ / khách trả lại món đã nhận
+
+    @Test
+    void kitchenVoidsPartOfAcceptedItemAndRestoresStock() {
+        String token = token("B03");
+        String dev = device();
+        long session = join(token, dev).get("sessionId").asLong();
+        long boId = jdbc.queryForObject("SELECT id FROM menu_item WHERE name = 'Bò lúc lắc'", Long.class);
+        int stockBefore = jdbc.queryForObject("SELECT stock FROM menu_item WHERE id = ?", Integer.class, boId);
+        HttpHeaders h = customerHeaders(token, dev, session);
+        h.set("Idempotency-Key", UUID.randomUUID().toString());
+        JsonNode order = http.postForEntity("/api/orders",
+                json("{\"items\":[{\"menuItemId\":" + boId + ",\"quantity\":3}]}", h), JsonNode.class).getBody();
+        long itemId = order.get("items").get(0).get("id").asLong();
+
+        ResponseEntity<JsonNode> pending = voidItem(itemId, 1, "OUT_OF_STOCK", null, 0);
+        assertEquals("INVALID_STATE_TRANSITION", pending.getBody().get("error").asText(), "món chưa nhận: dùng Từ chối");
+        assertEquals(200, updateStatus(itemId, "ACCEPTED", 0).getStatusCode().value());
+
+        assertEquals(400, voidItem(itemId, 1, "OTHER", " ", 1).getStatusCode().value(), "lý do khác phải ghi rõ");
+        assertEquals(400, voidItem(itemId, 4, "OUT_OF_STOCK", null, 1).getStatusCode().value(), "huỷ quá số suất");
+        assertEquals(409, voidItem(itemId, 1, "OUT_OF_STOCK", null, 0).getStatusCode().value(), "sai version");
+        HttpHeaders customer = customerHeaders(token, dev, session);
+        customer.setContentType(MediaType.APPLICATION_JSON);
+        assertEquals(401, http.postForEntity("/api/kitchen/order-items/" + itemId + "/void",
+                new HttpEntity<>("{\"quantity\":1,\"reason\":\"OTHER\",\"note\":\"x\",\"version\":1}", customer),
+                JsonNode.class).getStatusCode().value(), "khách không tự huỷ được món bếp đã nhận");
+
+        ResponseEntity<JsonNode> voided = voidItem(itemId, 1, "OUT_OF_STOCK", null, 1);
+        assertEquals(200, voided.getStatusCode().value(), String.valueOf(voided.getBody()));
+        JsonNode items = voided.getBody().get("items");
+        assertEquals(2, items.size(), "phần huỷ tách thành dòng riêng");
+        assertEquals(2, items.get(0).get("quantity").asInt());
+        assertEquals("ACCEPTED", items.get(0).get("status").asText(), "phần còn lại giữ trạng thái");
+        assertEquals("CANCELLED", items.get(1).get("status").asText());
+        assertEquals("OUT_OF_STOCK", items.get(1).get("cancelReason").asText());
+        assertEquals("bep", items.get(1).get("cancelledBy").asText());
+        assertEquals(240000, voided.getBody().get("total").asLong(), "tổng đơn chỉ tính 2 suất còn lại");
+        assertEquals(stockBefore - 2,
+                jdbc.queryForObject("SELECT stock FROM menu_item WHERE id = ?", Integer.class, boId), "chưa nấu -> hoàn kho");
+
+        assertEquals(200, updateStatus(itemId, "COOKING", 2).getStatusCode().value());
+        ResponseEntity<JsonNode> all = voidItem(itemId, 2, "KITCHEN_MISTAKE", "cháy", 3);
+        assertEquals("CANCELLED", all.getBody().get("status").asText(), "huỷ hết -> đơn bị huỷ");
+        assertEquals(stockBefore - 2,
+                jdbc.queryForObject("SELECT stock FROM menu_item WHERE id = ?", Integer.class, boId), "đã nấu -> không hoàn kho");
+        JsonNode bill = http.exchange("/api/payments/bill", HttpMethod.GET,
+                new HttpEntity<>(customerHeaders(token, dev, session)), JsonNode.class).getBody();
+        assertEquals(0, bill.get("total").asLong(), "món huỷ không tính tiền");
+    }
+
+    @Test
+    void returnedItemAfterPaymentRequiresRefundBeforeCheckout() {
+        String token = token("B06");
+        long tableId = tableId("B06");
+        String dev = device();
+        long session = join(token, dev).get("sessionId").asLong();
+        placeOrderAt(token, dev, session, 2);   // 2 x 55.000
+        long itemId = tableOrders(token, dev, session).get("orders").get(0).get("items").get(0).get("id").asLong();
+        int v = 0;
+        for (String s : List.of("ACCEPTED", "COOKING", "READY", "SERVED")) {
+            assertEquals(200, updateStatus(itemId, s, v++).getStatusCode().value());
+        }
+        JsonNode served = http.exchange("/api/kitchen/served-orders", HttpMethod.GET,
+                new HttpEntity<>(bearer(kitchenToken)), JsonNode.class).getBody();
+        long orderId = tableOrders(token, dev, session).get("orders").get(0).get("id").asLong();
+        boolean listed = false;
+        for (JsonNode o : served) {
+            listed |= o.get("id").asLong() == orderId;
+        }
+        assertTrue(listed, "bếp thấy món đã phục vụ của bàn đang có khách");
+
+        ResponseEntity<JsonNode> pay = createPayment(token, dev, session, UUID.randomUUID().toString(), "CASH");
+        assertEquals("PAYMENT_IN_PROGRESS", voidItem(itemId, 1, "RETURNED", null, v).getBody().get("error").asText(),
+                "đang thanh toán thì chưa huỷ được (số tiền đã chốt)");
+        HttpHeaders cashier = bearer(login("thungan", "thungan123"));
+        http.exchange("/api/cashier/payments/" + pay.getBody().get("id").asLong() + "/confirm", HttpMethod.PATCH,
+                json("{\"version\":0}", cashier), JsonNode.class);
+
+        assertEquals(200, voidItem(itemId, 1, "RETURNED", "nguội", v).getStatusCode().value());
+        JsonNode tile = http.exchange("/api/cashier/tables/" + tableId, HttpMethod.GET, new HttpEntity<>(cashier),
+                JsonNode.class).getBody().get("table");
+        assertEquals("REFUND_DUE", tile.get("state").asText());
+        assertEquals(55000, tile.get("refundDue").asLong(), "khách trả lại 1 suất sau khi đã trả tiền");
+
+        ResponseEntity<JsonNode> checkout = http.postForEntity("/api/cashier/tables/" + tableId + "/checkout",
+                json("{}", cashier), JsonNode.class);
+        assertEquals("CONFIRM_REQUIRED", checkout.getBody().get("error").asText());
+        assertEquals(55000, checkout.getBody().get("details").get("refundDue").asLong());
+        ResponseEntity<JsonNode> done = http.postForEntity("/api/cashier/tables/" + tableId + "/checkout",
+                json("{\"refundReturned\":true}", cashier), JsonNode.class);
+        assertEquals("EMPTY", done.getBody().get("state").asText());
+        String note = jdbc.queryForObject("SELECT end_note FROM table_session WHERE id = ?", String.class, session);
+        assertTrue(note.contains("Đã trả lại khách 55000đ"), note);
+    }
+
     // ================================================================ thanh toán tiền mặt, trả bàn
 
     @Test
@@ -505,6 +601,13 @@ class OrderFlowIntegrationTest {
         HttpHeaders h = bearer(kitchenToken);
         return http.exchange("/api/kitchen/order-items/" + itemId + "/status", HttpMethod.PATCH,
                 json("{\"status\":\"" + status + "\",\"version\":" + version + "}", h), JsonNode.class);
+    }
+
+    private ResponseEntity<JsonNode> voidItem(long itemId, int quantity, String reason, String note, int version) {
+        String body = "{\"quantity\":" + quantity + ",\"reason\":\"" + reason + "\",\"version\":" + version
+                + (note == null ? "" : ",\"note\":\"" + note + "\"") + "}";
+        return http.postForEntity("/api/kitchen/order-items/" + itemId + "/void", json(body, bearer(kitchenToken)),
+                JsonNode.class);
     }
 
     private static HttpEntity<String> json(String body, HttpHeaders headers) {

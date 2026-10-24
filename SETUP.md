@@ -408,7 +408,9 @@ Luồng thử 2 phút:
    Lần đầu vào, trang hỏi **tên** (có thể Bỏ qua).
    Bàn tự "mở phiên" khi người đầu tiên vào, không cần nhân viên bấm gì.
 3. Thêm món → **Đặt món** → đơn hiện ngay ở cột **Mới** trên màn hình bếp.
-4. Bếp bấm **Nhận** → **Bắt đầu nấu** → **Xong**: trang khách đổi trạng thái theo.
+4. Bếp bấm **Nhận** → **Bắt đầu nấu** → **Xong**: trang khách đổi trạng thái theo. Món đã nhận mà
+   cần huỷ (hết nguyên liệu, làm hỏng) hoặc khách trả lại: bếp bấm **Huỷ** ở món (món đã phục vụ thì mở **🍽 Món đã phục vụ**),
+   chọn số suất và lý do; món huỷ không tính tiền.
 5. Trên màn hình bếp bấm **Giả lập mất mạng 5s**, trong lúc đó đặt thêm một đơn: khi bếp kết nối lại, đơn vẫn hiện
    và thanh thống kê có **Gửi bù**.
 6. Mở trang Thu ngân (cửa sổ ẩn danh khác). Trên trang khách bấm **🙋 Gọi phục vụ**: trang Thu ngân kêu "ting", hiện
@@ -424,7 +426,7 @@ Giải thích các khái niệm mới:
 * **Đóng bàn / Mở bàn** ở trang Quản trị = **ngừng phục vụ / phục vụ lại** (bảo trì), không liên quan tới lượt khách.
   Không đóng được bàn đang có khách.
 
-Checklist đầy đủ 21 bước nằm trong [`source/TESTING.md`](source/TESTING.md).
+Checklist đầy đủ 22 bước nằm trong [`source/TESTING.md`](source/TESTING.md).
 
 ---
 
@@ -620,7 +622,7 @@ cd C:\Projects\LTM\source\server
 mvn test
 ```
 
-Kết quả đúng: `Tests run: 22, Failures: 0, Errors: 0`. Test chạy bằng cơ sở dữ liệu H2 riêng, không đụng tới MySQL.
+Kết quả đúng: `Tests run: 24, Failures: 0, Errors: 0`. Test chạy bằng cơ sở dữ liệu H2 riêng, không đụng tới MySQL.
 
 ### 13.2. End-to-end (server phải đang chạy ở cổng 8080)
 
@@ -629,7 +631,7 @@ cd C:\Projects\LTM\source\loadtest
 npm run e2e
 ```
 
-Kết quả đúng: `KẾT QUẢ: 193 đạt, 0 lỗi` (cần Node.js và đã chạy `npm install` ở Bước 8.3). Nếu server chạy cổng khác:
+Kết quả đúng: `KẾT QUẢ: 205 đạt, 0 lỗi` (cần Node.js và đã chạy `npm install` ở Bước 8.3). Nếu server chạy cổng khác:
 `node e2e-test.js --base=http://localhost:8081`.
 
 ---

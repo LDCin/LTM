@@ -46,6 +46,12 @@ public class SchemaMigrator implements CommandLineRunner {
             // Mọi bàn cũ đều đang phục vụ, phiên vẫn giữ nguyên trong current_session_id.
             jdbc.update("UPDATE restaurant_table SET status = 'OPEN'");
         }
+        if (!columnExists("order_item", "cancel_reason")) {
+            log.info("Nâng cấp schema: lý do huỷ / trả lại món (cancel_reason, cancel_note, cancelled_by)");
+            jdbc.execute("ALTER TABLE order_item ADD COLUMN cancel_reason VARCHAR(20) NULL");
+            jdbc.execute("ALTER TABLE order_item ADD COLUMN cancel_note VARCHAR(200) NULL");
+            jdbc.execute("ALTER TABLE order_item ADD COLUMN cancelled_by VARCHAR(50) NULL");
+        }
     }
 
     private boolean columnExists(String table, String column) {

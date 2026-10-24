@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom';
 import ConnectionBadge from '../components/ConnectionBadge.jsx';
 import { ApiError, isRetryable, newIdempotencyKey, request, withRetry, wsUrl } from '../lib/api.js';
 import { RealtimeConnection } from '../lib/connection.js';
-import { ITEM_STATUS, categoryIcon, formatVnd } from '../lib/format.js';
+import { ITEM_STATUS, VOID_REASON, categoryIcon, formatVnd, mergeOrder } from '../lib/format.js';
 
 // ------------------------------------------------------------------ lưu trên trình duyệt
 
@@ -52,6 +52,8 @@ function applyEvent(orders, msg) {
       return orders.map((o) =>
         o.id !== p.orderId ? o : { ...o, status: 'CANCELLED', items: o.items.map((i) => ({ ...i, status: 'CANCELLED' })) },
       );
+    case 'ORDER_UPDATED': // bếp huỷ / khách trả lại món: payload.order là bản đơn mới nhất
+      return orders.map((o) => (o.id === p.order.id ? mergeOrder(o, p.order) : o));
     default:
       return orders;
   }
@@ -212,7 +214,14 @@ export default function Customer() {
             case 'ORDER_CREATED':
             case 'ITEM_STATUS_CHANGED':
             case 'ORDER_CANCELLED':
+            case 'ORDER_UPDATED':
               setOrders((prev) => applyEvent(prev, msg));
+              if (msg.type === 'ORDER_UPDATED') {
+                const c = msg.payload.change;
+                notify(c.reason === 'RETURNED'
+                  ? `↩ Đã ghi nhận trả lại ${c.quantity}× ${c.name}, không tính tiền`
+                  : `❌ Bếp huỷ ${c.quantity}× ${c.name}: ${VOID_REASON[c.reason]}${c.note ? ` (${c.note})` : ''}`);
+              }
               if (msg.type === 'ITEM_STATUS_CHANGED' && msg.payload.to === 'READY') {
                 notify(`🔔 ${msg.payload.name} đã sẵn sàng!`);
               }
@@ -585,8 +594,13 @@ export default function Customer() {
                   <span>
                     {i.quantity}× {i.name}
                     {i.note && <em className="note"> ({i.note})</em>}
+                    {i.cancelReason && (
+                      <em className="note void-reason"> · {VOID_REASON[i.cancelReason]}{i.cancelNote ? `: ${i.cancelNote}` : ''}</em>
+                    )}
                   </span>
-                  <span className={`chip chip-${ITEM_STATUS[i.status]?.tone}`}>{ITEM_STATUS[i.status]?.label}</span>
+                  <span className={`chip chip-${ITEM_STATUS[i.status]?.tone}`}>
+                    {i.cancelReason === 'RETURNED' ? 'Đã trả lại' : ITEM_STATUS[i.status]?.label}
+                  </span>
                 </div>
               ))}
               {mine && canOrder && o.items.every((i) => i.status === 'PENDING') && (
@@ -623,6 +637,9 @@ export default function Customer() {
                   <span>Còn phải trả</span>
                   <strong>{formatVnd(Math.max(0, bill.remaining))}</strong>
                 </div>
+                {bill.remaining < 0 && (
+                  <div className="banner ok">Có món được huỷ sau khi bạn đã thanh toán: quầy thu ngân sẽ trả lại bạn {formatVnd(-bill.remaining)}</div>
+                )}
                 {bill.remaining > 0 && !paymentPending && (
                   <button className="btn primary block" onClick={() => setShowPay(true)}>
                     Thanh toán {formatVnd(bill.remaining)}
