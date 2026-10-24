@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import Login from '../components/Login.jsx';
-import { resetTableSession } from '../components/TableSessionPanel.jsx';
 import { ApiError, getStaffSession, request, setStaffSession } from '../lib/api.js';
 import { formatVnd } from '../lib/format.js';
 
 const TABS = [
   ['tables', '🪑 Bàn & QR'],
   ['menu', '📋 Thực đơn'],
+  ['payments', '💳 Thanh toán'],
   ['monitor', '📡 Giám sát'],
   ['settings', '🧪 Cấu hình thực nghiệm'],
 ];
@@ -52,8 +52,9 @@ export default function Admin() {
         </button>
       </header>
       <main className="admin-body">
-        {tab === 'tables' && <TablesTab api={api} token={session.token} />}
+        {tab === 'tables' && <TablesTab api={api} />}
         {tab === 'menu' && <MenuTab api={api} />}
+        {tab === 'payments' && <PaymentsTab api={api} />}
         {tab === 'monitor' && <MonitorTab api={api} />}
         {tab === 'settings' && <SettingsTab api={api} />}
       </main>
@@ -81,7 +82,7 @@ function useAsync(loader, deps) {
 
 // ------------------------------------------------------------------ bàn & QR
 
-function TablesTab({ api, token }) {
+function TablesTab({ api }) {
   const { data: tables, error, reload } = useAsync(() => api('GET', '/api/admin/tables'), []);
   const [baseUrl, setBaseUrl] = useState(window.location.origin);
   const [code, setCode] = useState('');
@@ -101,7 +102,7 @@ function TablesTab({ api, token }) {
     <div>
       <div className="toolbar">
         <label>
-          Địa chỉ in trong QR (dùng IP LAN để điện thoại truy cập được):
+          Địa chỉ in trong QR (địa chỉ tunnel hoặc IP LAN để điện thoại truy cập được):
           <input value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} style={{ width: 280 }} />
         </label>
         <input placeholder="Mã bàn mới (VD B13)" value={code} onChange={(e) => setCode(e.target.value)} />
@@ -124,8 +125,8 @@ function TablesTab({ api, token }) {
       {(error || msg) && <p className="error">{error || msg}</p>}
       {window.location.hostname === 'localhost' && (
         <p className="hint">
-          Bạn đang mở bằng localhost: điện thoại sẽ không truy cập được. Hãy mở trang này bằng địa chỉ IP LAN của máy chủ
-          (VD http://192.168.1.10:5173/admin) hoặc sửa ô địa chỉ ở trên.
+          Bạn đang mở bằng localhost: điện thoại sẽ không truy cập được. Hãy mở trang này bằng địa chỉ tunnel
+          (VD https://ten-mien.ngrok-free.dev/admin), IP LAN của máy chủ, hoặc sửa ô địa chỉ ở trên.
         </p>
       )}
       <div className="table-grid">
@@ -137,8 +138,8 @@ function TablesTab({ api, token }) {
               <div key={t.id} className={`table-card ${t.status === 'OPEN' ? 'open' : ''}`}>
                 <div className="table-card-head">
                   <strong>Bàn {t.code}</strong>
-                  <span className={`chip ${t.status === 'OPEN' ? 'chip-ok' : 'chip-muted'}`}>
-                    {t.status === 'OPEN' ? 'Đang mở' : 'Đóng'}
+                  <span className={`chip ${t.status !== 'OPEN' ? 'chip-muted' : t.sessionId ? 'chip-warn' : 'chip-ok'}`}>
+                    {t.status !== 'OPEN' ? 'Ngừng phục vụ' : t.sessionId ? 'Có khách' : 'Trống'}
                   </span>
                 </div>
                 <QRCodeSVG value={url} size={150} />
@@ -146,17 +147,21 @@ function TablesTab({ api, token }) {
                   Mở link gọi món
                 </a>
                 <div className="table-card-actions no-print">
+                  {/* Đóng bàn = ngừng phục vụ (bảo trì). Kết thúc lượt khách ("Trả bàn") nằm ở trang thu ngân. */}
                   {t.status === 'OPEN' ? (
-                    <>
-                      <button className="btn small primary" onClick={() => act(() => resetTableSession(token, t.id))}>
-                        Dọn bàn
-                      </button>
-                      <button className="btn small" onClick={() => act(() => api('POST', `/api/admin/tables/${t.id}/close`))}>
-                        Đóng bàn
-                      </button>
-                    </>
+                    <button
+                      className="btn small"
+                      title="Ngừng phục vụ bàn này (bảo trì)"
+                      onClick={() => act(() => api('POST', `/api/admin/tables/${t.id}/close`))}
+                    >
+                      Đóng bàn
+                    </button>
                   ) : (
-                    <button className="btn small primary" onClick={() => act(() => api('POST', `/api/admin/tables/${t.id}/open`))}>
+                    <button
+                      className="btn small primary"
+                      title="Cho bàn phục vụ trở lại"
+                      onClick={() => act(() => api('POST', `/api/admin/tables/${t.id}/open`))}
+                    >
                       Mở bàn
                     </button>
                   )}
@@ -177,6 +182,69 @@ function TablesTab({ api, token }) {
       {tables?.some((t) => t.code.startsWith('LT')) && (
         <p className="hint">Đã ẩn {tables.filter((t) => t.code.startsWith('LT')).length} bàn tạo bởi load test (mã LT...).</p>
       )}
+    </div>
+  );
+}
+
+// ------------------------------------------------------------------ lịch sử thanh toán (chỉ xem)
+
+const PAYMENT_STATUS = {
+  PENDING: ['Đang chờ', 'chip-warn'],
+  PAID: ['Đã trả', 'chip-ok'],
+  FAILED: ['Thất bại', 'chip-danger'],
+  EXPIRED: ['Hết hạn', ''],
+  CANCELLED: ['Đã huỷ', ''],
+};
+
+function PaymentsTab({ api }) {
+  const { data, error, reload } = useAsync(() => api('GET', '/api/admin/payments?limit=200'), []);
+  const paidTotal = (data || []).filter((p) => p.status === 'PAID').reduce((s, p) => s + p.amount, 0);
+  return (
+    <div>
+      <div className="toolbar">
+        <button className="btn" onClick={reload}>
+          Tải lại
+        </button>
+        <span className="hint">
+          Tổng đã thu (200 lần gần nhất): <strong>{formatVnd(paidTotal)}</strong>. Xác nhận tiền mặt và trả bàn ở trang{' '}
+          <a href="/cashier">Thu ngân</a>.
+        </span>
+      </div>
+      {error && <p className="error">{error}</p>}
+      <table className="data-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Bàn</th>
+            <th>Phiên</th>
+            <th>Cách trả</th>
+            <th>Số tiền</th>
+            <th>Trạng thái</th>
+            <th>Tạo lúc</th>
+            <th>Trả lúc</th>
+            <th>Xác nhận bởi</th>
+          </tr>
+        </thead>
+        <tbody>
+          {(data || []).map((p) => (
+            <tr key={p.id}>
+              <td>{p.id}</td>
+              <td>{p.tableCode}</td>
+              <td>{p.sessionId}</td>
+              <td>{p.method === 'VNPAY' ? 'VNPay' : 'Tiền mặt'}</td>
+              <td>{formatVnd(p.amount)}</td>
+              <td>
+                <span className={`chip ${PAYMENT_STATUS[p.status]?.[1] || ''}`}>{PAYMENT_STATUS[p.status]?.[0] || p.status}</span>
+                {p.needsRefund && <span className="chip chip-danger">Cần hoàn tiền</span>}
+              </td>
+              <td>{new Date(p.createdAt).toLocaleString('vi-VN')}</td>
+              <td>{p.paidAt ? new Date(p.paidAt).toLocaleString('vi-VN') : '—'}</td>
+              <td>{p.confirmedBy || '—'}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {data?.length === 0 && <p className="hint">Chưa có lần thanh toán nào.</p>}
     </div>
   );
 }

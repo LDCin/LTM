@@ -387,17 +387,29 @@ Với MySQL Workbench: bấm Refresh ở khung **Schemas** sẽ thấy database 
 | Trang chủ | http://localhost:8080 | – |
 | Quản trị (bàn, QR, thực đơn, giám sát, cấu hình thực nghiệm) | http://localhost:8080/admin | `admin` / `admin123` |
 | Màn hình bếp | http://localhost:8080/kitchen | `bep` / `bep123` |
-| Khách gọi món | Ở trang Quản trị → **Bàn & QR** → bấm "Mở link gọi món" của một bàn đang mở (hoặc quét QR) | – |
+| Thu ngân (sơ đồ bàn, thanh toán, trả bàn) | http://localhost:8080/cashier | `thungan` / `thungan123` |
+| Khách gọi món | Ở trang Quản trị → **Bàn & QR** → bấm "Mở link gọi món" của một bàn (hoặc quét QR) | – |
 
 Luồng thử 2 phút:
 
 1. Mở trang Quản trị và trang Bếp (nên mở trang Bếp trong **cửa sổ ẩn danh**, vì hai trang dùng chung phiên đăng nhập
    trong cùng trình duyệt).
 2. Mở link gọi món của một bàn, bấm F12 → biểu tượng điện thoại để xem như trên điện thoại.
+   Lần đầu vào, trang hỏi **tên** (có thể Bỏ qua).
+   Bàn tự "mở phiên" khi người đầu tiên vào, không cần nhân viên bấm gì.
 3. Thêm món → **Đặt món** → đơn hiện ngay ở cột **Mới** trên màn hình bếp.
 4. Bếp bấm **Nhận** → **Bắt đầu nấu** → **Xong**: trang khách đổi trạng thái theo.
 5. Trên màn hình bếp bấm **Giả lập mất mạng 5s**, trong lúc đó đặt thêm một đơn: khi bếp kết nối lại, đơn vẫn hiện
    và thanh thống kê có **Gửi bù**.
+6. Trên trang khách bấm **Thanh toán** → chọn **Tiền mặt tại quầy**. Mở trang Thu ngân (cửa sổ ẩn danh khác): bàn chuyển
+   màu cam "Chờ thanh toán" → bấm vào bàn → **Đã nhận tiền** → **Trả bàn**. Trang khách hiện "Cảm ơn quý khách".
+
+Giải thích các khái niệm mới:
+
+* **Phiên bàn** = một lượt khách. Tự mở khi khách đầu tiên quét QR; kết thúc khi thu ngân bấm **Trả bàn** (hoặc tự kết
+  thúc: 30 phút không gọi món, hoặc 30 phút sau khi đã trả đủ tiền). Mọi điện thoại trong cùng phiên thấy **đơn chung**.
+* **Đóng bàn / Mở bàn** ở trang Quản trị = **ngừng phục vụ / phục vụ lại** (bảo trì), không liên quan tới lượt khách.
+  Không đóng được bàn đang có khách.
 
 Checklist đầy đủ 20 bước nằm trong [`source/TESTING.md`](source/TESTING.md).
 
@@ -460,6 +472,10 @@ winget install --id Ngrok.Ngrok -e
 ```
 
    (hoặc tải tại https://ngrok.com/download, giải nén `ngrok.exe` vào một thư mục có trong PATH.)
+
+   **Lưu ý:** `winget` có thể cài bản cũ (ví dụ 3.3.1). Bản cũ không có tuỳ chọn `--url` và bị tài khoản miễn phí từ
+   chối với lỗi `ERR_NGROK_121` ("agent version is too old"). Cài xong, mở terminal mới rồi chạy `ngrok update` và
+   kiểm tra `ngrok version` phải từ **3.20.0** trở lên.
 2. Đăng ký tài khoản miễn phí tại https://dashboard.ngrok.com/signup, vào mục **Your Authtoken**, sao chép lệnh
    `ngrok config add-authtoken ...` và chạy **một lần**:
 
@@ -506,7 +522,7 @@ Lưu ý: kiểu "quick tunnel" này **đổi địa chỉ mỗi lần chạy**, 
 
 1. Trên máy chủ, mở trang Quản trị **bằng địa chỉ tunnel**: `https://<dia-chi-tunnel>/admin` (không dùng
    `localhost`). Kiểm tra ô **"Địa chỉ in trong QR"** đã là địa chỉ tunnel; nếu chưa, sửa ô đó.
-2. Vào **Bàn & QR**, mở bàn và hiển thị / in mã QR.
+2. Vào **Bàn & QR** để hiển thị / in mã QR (không cần mở bàn: phiên tự mở khi khách quét).
 3. Dùng điện thoại **tắt Wi-Fi, bật 4G** quét QR: vào được trang gọi món là tunnel hoạt động.
 4. Màn hình bếp có thể mở bằng `http://localhost:8080/kitchen` ngay trên máy chủ, hoặc
    `https://<dia-chi-tunnel>/kitchen` trên máy tính bảng khác.
@@ -528,7 +544,7 @@ Khi tunnel đang mở, **bất kỳ ai biết địa chỉ** đều truy cập �
    ```
 
    (chạy bằng terminal thì thêm dòng `$env:AUTH_SECRET = "mot-chuoi-ngau-nhien-that-dai"` trước `java -jar`).
-2. Tài khoản mẫu `admin`/`admin123` và `bep`/`bep123` được ghi công khai trong README. Hệ thống chưa có chức năng đổi
+2. Tài khoản mẫu `admin`/`admin123`, `bep`/`bep123`, `thungan`/`thungan123` được ghi công khai trong README. Hệ thống chưa có chức năng đổi
    mật khẩu, nên **chỉ mở tunnel trong lúc demo** và tắt ngay sau đó (`Ctrl + C` ở cửa sổ tunnel).
 3. **Không chạy server bằng profile `h2`** khi mở tunnel. Profile này bật trang quản lý cơ sở dữ liệu `/h2-console`;
    request đi qua tunnel xuất phát từ chính máy chủ nên người ngoài cũng vào được trang này.
@@ -536,7 +552,7 @@ Khi tunnel đang mở, **bất kỳ ai biết địa chỉ** đều truy cập �
 
 ### 12.6. Rate limit khi đi qua tunnel
 
-Server giới hạn request theo địa chỉ IP (60 request dồn, hồi 20 request/giây mỗi IP; riêng đặt món thì giới hạn 5
+Server giới hạn request theo địa chỉ IP (60 request dồn, hồi 20 request/giây mỗi IP; riêng đặt món thì giới hạn 10
 đơn/phút **mỗi bàn**). Qua tunnel, mọi request đều đến từ chương trình tunnel trên máy bạn, nên server thấy **tất cả
 điện thoại có chung một IP** là `127.0.0.1`, và giới hạn theo IP bị áp chung cho tất cả.
 
@@ -544,6 +560,25 @@ Server giới hạn request theo địa chỉ IP (60 request dồn, hồi 20 req
 * Nhiều người dùng cùng lúc và bị báo "thao tác quá nhanh" (429): vào Quản trị → **Cấu hình thực nghiệm** → bật
   **"Tin header X-Forwarded-For"** để server đọc IP thật mà ngrok/Cloudflare gắn vào request. Thiết lập này mất khi
   khởi động lại server. Đánh đổi: client có thể tự gửi header này để giả IP, nên chỉ bật khi cần.
+
+### 12.7. Thanh toán VNPay (sandbox) qua tunnel
+
+VNPay chỉ hiện trên trang khách khi server có đủ hai biến môi trường. Thêm vào ô **Environment variables** ở Bước 7.3
+(lấy mã trong email VNPay gửi khi đăng ký sandbox; **không** ghi vào file nào trong dự án):
+
+```text
+DB_PASSWORD=...;AUTH_SECRET=...;VNPAY_TMN_CODE=<ma-website>;VNPAY_HASH_SECRET=<chuoi-bi-mat>;APP_PUBLIC_URL=https://<ten-mien-ngrok>
+```
+
+* `APP_PUBLIC_URL` (không bắt buộc): địa chỉ tunnel, dùng để VNPay đưa khách quay về sau khi trả tiền. Bỏ trống thì
+  server tự lấy theo địa chỉ khách đang mở trang (đúng khi khách mở bằng địa chỉ tunnel).
+* Nên dùng **ngrok với tên miền cố định** (`ngrok http 8080 --url=<ten-mien>.ngrok-free.dev`), vì IPN URL khai báo với
+  VNPay phải giữ nguyên: `https://<ten-mien>.ngrok-free.dev/api/payments/vnpay/ipn`.
+* Cách thử: khách bấm **Thanh toán → VNPay** → trang VNPay → chọn thẻ nội địa **NCB** và nhập thẻ test trong tài liệu
+  VNPay sandbox → VNPay đưa về trang gọi món, bàn hiện "Đã thanh toán đủ", thu ngân thấy bàn chuyển "Đã thanh toán".
+* Server xác nhận tiền bằng hai đường: **IPN** (server VNPay gọi thẳng server mình, có chữ ký) và **Return URL** (dữ
+  liệu có chữ ký trên trình duyệt). Chưa khai báo được IPN với VNPay thì đường thứ hai vẫn đủ; ngoài ra server tự **tra
+  cứu giao dịch** với VNPay trước khi cho một lần thanh toán hết hạn (15 phút).
 
 ---
 

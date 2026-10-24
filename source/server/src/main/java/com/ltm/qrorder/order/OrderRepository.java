@@ -26,7 +26,7 @@ public class OrderRepository {
             rs.getInt("version"), rs.getString("station"), rs.getLong("updated_at"));
 
     private record OrderRow(long id, long tableId, String tableCode, long sessionId, String status, long total,
-                            long createdAt) {
+                            long createdAt, String guestName, boolean firstInSession) {
     }
 
     /** Một món kèm thông tin đơn/bàn/thiết bị chứa nó. */
@@ -41,11 +41,11 @@ public class OrderRepository {
         this.named = named;
     }
 
-    public long insertOrder(long sessionId, long tableId, long total, long now, String deviceId) {
+    public long insertOrder(long sessionId, long tableId, long total, long now, String deviceId, String guestName) {
         return Jdbc.insert(jdbc,
-                "INSERT INTO orders (session_id, table_id, status, total, created_at, updated_at, device_id) " +
-                        "VALUES (?, ?, 'NEW', ?, ?, ?, ?)",
-                "id", sessionId, tableId, total, now, now, deviceId);
+                "INSERT INTO orders (session_id, table_id, status, total, created_at, updated_at, device_id, guest_name) " +
+                        "VALUES (?, ?, 'NEW', ?, ?, ?, ?, ?)",
+                "id", sessionId, tableId, total, now, now, deviceId, guestName);
     }
 
     public long insertItem(long orderId, MenuItemDto menuItem, int quantity, String note, long now) {
@@ -64,19 +64,31 @@ public class OrderRepository {
         return loadWithItems("WHERE o.id = ?", id).stream().findFirst();
     }
 
-    /**
-     * 100 đơn gần nhất mà THIẾT BỊ này đặt trong phiên hiện tại của bàn.
-     * Máy khác quét cùng mã QR (kể cả khách đến sau) không thấy các đơn này.
-     */
-    public List<OrderDto> findBySessionAndDevice(long sessionId, String deviceId) {
-        return loadWithItems("WHERE o.session_id = ? AND o.device_id = ? ORDER BY o.created_at DESC, o.id DESC LIMIT "
-                + MAX_SESSION_ORDERS, sessionId, deviceId);
+    /** 100 đơn gần nhất của phiên bàn (mọi điện thoại trong phiên thấy chung). */
+    public List<OrderDto> findBySession(long sessionId) {
+        return loadWithItems("WHERE o.session_id = ? ORDER BY o.created_at DESC, o.id DESC LIMIT " + MAX_SESSION_ORDERS,
+                sessionId);
+    }
+
+    /** Id các đơn do thiết bị này đặt trong phiên (để biết đơn nào là "của mình"). */
+    public List<Long> findOrderIdsOfDevice(long sessionId, String deviceId) {
+        if (deviceId == null) {
+            return List.of();
+        }
+        return jdbc.queryForList("SELECT id FROM orders WHERE session_id = ? AND device_id = ?", Long.class,
+                sessionId, deviceId);
     }
 
     public Optional<String> findDeviceId(long orderId) {
         List<String> rows = jdbc.query("SELECT device_id FROM orders WHERE id = ?",
                 (rs, n) -> rs.getString("device_id"), orderId);
         return rows.isEmpty() ? Optional.empty() : Optional.ofNullable(rows.get(0));
+    }
+
+    /** Phiên đang có lần thanh toán chờ xử lý (cột pending_session_id chỉ có giá trị khi PENDING). */
+    public boolean hasPendingPayment(long sessionId) {
+        Long n = jdbc.queryForObject("SELECT COUNT(*) FROM payment WHERE pending_session_id = ?", Long.class, sessionId);
+        return n != null && n > 0;
     }
 
     public long countOrdersInSession(long sessionId) {
@@ -103,10 +115,12 @@ public class OrderRepository {
      */
     private List<OrderDto> loadWithItems(String whereOrderLimit, Object... args) {
         List<OrderRow> orders = new ArrayList<>(jdbc.query(
-                "SELECT o.id, o.table_id, t.code AS table_code, o.session_id, o.status, o.total, o.created_at " +
+                "SELECT o.id, o.table_id, t.code AS table_code, o.session_id, o.status, o.total, o.created_at, o.guest_name, " +
+                        "(o.id = (SELECT MIN(f.id) FROM orders f WHERE f.session_id = o.session_id)) AS first_in_session " +
                         "FROM orders o JOIN restaurant_table t ON t.id = o.table_id " + whereOrderLimit,
                 (rs, n) -> new OrderRow(rs.getLong("id"), rs.getLong("table_id"), rs.getString("table_code"),
-                        rs.getLong("session_id"), rs.getString("status"), rs.getLong("total"), rs.getLong("created_at")),
+                        rs.getLong("session_id"), rs.getString("status"), rs.getLong("total"), rs.getLong("created_at"),
+                        rs.getString("guest_name"), rs.getBoolean("first_in_session")),
                 args));
         if (orders.isEmpty()) {
             return List.of();
@@ -124,7 +138,7 @@ public class OrderRepository {
         List<OrderDto> result = new ArrayList<>(orders.size());
         for (OrderRow o : orders) {
             result.add(new OrderDto(o.id(), o.tableId(), o.tableCode(), o.sessionId(), o.status(), o.total(),
-                    o.createdAt(), itemsByOrder.getOrDefault(o.id(), List.of())));
+                    o.createdAt(), o.guestName(), o.firstInSession(), itemsByOrder.getOrDefault(o.id(), List.of())));
         }
         return result;
     }

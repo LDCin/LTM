@@ -13,7 +13,7 @@ export class ApiError extends Error {
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /** Gọi REST API với timeout; mọi lỗi được chuẩn hoá thành ApiError. */
-export async function request(method, path, { body, headers = {}, token, tableToken, timeoutMs = 5000 } = {}) {
+export async function request(method, path, { body, headers = {}, token, tableToken, sessionId, timeoutMs = 5000 } = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   const allHeaders = { ...headers };
@@ -23,6 +23,8 @@ export async function request(method, path, { body, headers = {}, token, tableTo
     allHeaders['X-Table-Token'] = tableToken;
     allHeaders['X-Device-Id'] = getDeviceId(); // request của khách luôn kèm mã thiết bị
   }
+  // Phiên bàn máy này đang giữ: server từ chối (409 SESSION_ENDED) nếu lượt khách đã kết thúc
+  if (sessionId) allHeaders['X-Session-Id'] = String(sessionId);
   try {
     const res = await fetch(path, {
       method,
@@ -94,7 +96,7 @@ let memoryDeviceId = null;
 
 /**
  * Mã thiết bị: sinh ngẫu nhiên lần đầu và giữ trong localStorage của trình duyệt.
- * Server dùng mã này để mỗi máy chỉ thấy đơn của chính mình, dù nhiều máy quét cùng một mã QR.
+ * Server dùng mã này để biết đơn nào do chính máy này đặt (máy đó mới được huỷ). Mã không bao giờ bị trả ra ngoài.
  * Nếu localStorage bị chặn (chế độ riêng tư) thì dùng tạm mã trong bộ nhớ cho tới khi đóng trang.
  */
 export function getDeviceId() {

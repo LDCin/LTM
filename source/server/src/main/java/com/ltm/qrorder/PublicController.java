@@ -3,14 +3,18 @@ package com.ltm.qrorder;
 import com.ltm.qrorder.config.AppProperties;
 import com.ltm.qrorder.menu.MenuDtos.MenuSnapshot;
 import com.ltm.qrorder.menu.MenuService;
+import com.ltm.qrorder.common.DeviceIds;
 import com.ltm.qrorder.order.OrderDtos.TableView;
+import com.ltm.qrorder.payment.PaymentService;
 import com.ltm.qrorder.table.TableInfo;
 import com.ltm.qrorder.table.TableService;
+import com.ltm.qrorder.table.TableService.JoinResult;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -26,11 +30,13 @@ public class PublicController {
     private final AppProperties props;
     private final TableService tables;
     private final MenuService menu;
+    private final PaymentService payments;
 
-    public PublicController(AppProperties props, TableService tables, MenuService menu) {
+    public PublicController(AppProperties props, TableService tables, MenuService menu, PaymentService payments) {
         this.props = props;
         this.tables = tables;
         this.menu = menu;
+        this.payments = payments;
     }
 
     @GetMapping("/config")
@@ -39,6 +45,7 @@ public class PublicController {
         m.put("deliveryMode", props.getDeliveryMode());
         m.put("pollingIntervalMs", props.getPollingIntervalMs());
         m.put("heartbeatMs", props.getWs().getHeartbeatMs());
+        m.put("paymentMethods", payments.availableMethods());
         m.put("serverTime", System.currentTimeMillis());
         return m;
     }
@@ -47,6 +54,24 @@ public class PublicController {
     public TableView resolveTable(@PathVariable String qrToken) {
         TableInfo t = tables.resolveToken(qrToken);
         return new TableView(t.id(), t.code(), t.status(), t.isOpen());
+    }
+
+    /** Khách vào bàn: kết quả trả về cho trang gọi món. */
+    public record JoinView(long tableId, String code, long sessionId, long sessionOpenedAt, boolean newSession) {
+    }
+
+    /**
+     * Khách quét QR rồi "vào bàn": vào phiên đang có, hoặc mở phiên mới nếu bàn trống.
+     * Dùng POST vì có thể TẠO phiên (GET không được có tác dụng phụ).
+     * Bàn ngừng phục vụ -> 409 TABLE_CLOSED.
+     */
+    @PostMapping("/tables/{qrToken}/join")
+    public JoinView join(@PathVariable String qrToken,
+                         @RequestHeader(value = DeviceIds.HEADER, required = false) String deviceId) {
+        DeviceIds.optional(deviceId);
+        JoinResult r = tables.join(qrToken);
+        TableInfo t = r.table();
+        return new JoinView(t.id(), t.code(), t.sessionId(), tables.sessionOpenedAt(t.sessionId()), r.created());
     }
 
     /**

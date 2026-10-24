@@ -63,6 +63,7 @@ Mở `http://localhost:8080`. Dữ liệu mẫu được tạo tự động:
 |---|---|---|
 | Quản trị (bàn, QR, thực đơn, giám sát) | `/admin` | `admin` / `admin123` |
 | Màn hình bếp | `/kitchen` | `bep` / `bep123` |
+| Thu ngân (sơ đồ bàn, thanh toán, trả bàn) | `/cashier` | `thungan` / `thungan123` |
 | Khách gọi món | `/t/<qrToken>` (quét QR ở trang Quản trị, hoặc xem link trong log khởi động) | – |
 
 ## 4. Chạy với MySQL
@@ -106,16 +107,18 @@ cd source/server
 mvn test
 ```
 
-16 test, gồm: token bucket; state machine; và test tích hợp qua HTTP thật (đặt trùng cùng key, **8 request song song
+21 test, gồm: token bucket; state machine; và test tích hợp qua HTTP thật (đặt trùng cùng key, **8 request song song
 cùng key chỉ tạo 1 đơn**, cùng key khác nội dung → 409, request sai → 400, mã QR sai → 401, sai version → 409,
-chuyển trạng thái sai → 409, bếp chưa đăng nhập → 401, ETag → 304, máy khác cùng bàn không thấy đơn,
-dọn bàn → lượt khách mới không thấy đơn cũ).
+bếp chưa đăng nhập → 401, ETag → 304, **8 máy vào bàn trống cùng lúc chỉ mở 1 phiên**, đơn chung trong phiên + chỉ
+máy đặt mới huỷ được, máy của lượt cũ bị chặn sau khi trả bàn, admin không đóng được bàn có khách, thanh toán tiền
+mặt + thu ngân xác nhận + trả bàn, **IPN VNPay: sai chữ ký → 97, sai số tiền → 04, gọi lặp → 02**, phiên bỏ trống tự
+kết thúc).
 
-Kiểm thử end-to-end trên server đang chạy (167 ca, khoảng 40 giây): REST, phân quyền, xử lý lỗi, idempotency,
+Kiểm thử end-to-end trên server đang chạy (181 ca trong 16 nhóm, khoảng 40 giây): REST, phân quyền, xử lý lỗi, idempotency,
 WebSocket (sự kiện, ACK, RESUME, phân quyền SUBSCRIBE/SEND, giới hạn 8 kết nối/bàn, frame hỏng/quá cỡ,
-time-to-first-message), state machine, optimistic lock, huỷ đơn, tồn kho, quản lý bàn/thực đơn, các chế độ baseline,
-rate limit, giao đơn tin cậy khi bếp mất mạng, đơn riêng theo thiết bị và dọn bàn. Test dùng bàn riêng `LTE...`,
-tự khôi phục cấu hình khi xong, và có dọn lượt khách của bàn **B12** để kiểm tra số liệu (đừng chạy trên DB đang demo).
+time-to-first-message), state machine, optimistic lock, huỷ đơn, tồn kho, bàn (vào bàn, ngừng/phục vụ lại), thực đơn,
+các chế độ baseline, rate limit, giao đơn tin cậy khi bếp mất mạng, phiên bàn nhiều điện thoại, thanh toán và thu ngân.
+Test dùng bàn riêng `LTE...` và tự khôi phục cấu hình khi xong.
 Server chạy cổng khác: `node e2e-test.js --base=http://localhost:8081`.
 
 ```bash
@@ -124,15 +127,20 @@ npm install
 npm run e2e
 ```
 
-### Riêng tư giữa các lượt khách
+### Phiên bàn, đơn chung, thanh toán
 
-- Mỗi trình duyệt tự sinh một **mã thiết bị** ngẫu nhiên (localStorage) và gửi kèm mọi request (`X-Device-Id`)
-  và kết nối WebSocket (`deviceId`). Khách chỉ thấy, chỉ huỷ được và chỉ nhận sự kiện realtime của đơn do
-  chính máy mình đặt, trong lượt khách hiện tại của bàn. Máy khác quét cùng QR, kể cả khách đến sau, không thấy.
-- Nhân viên bấm **"🪑 Dọn bàn"** trên màn hình bếp (hoặc "Dọn bàn" ở trang Quản trị) khi khách rời đi:
-  lượt cũ kết thúc, lượt mới bắt đầu, mã QR in trên bàn giữ nguyên. Đơn chưa làm xong của lượt cũ vẫn ở màn hình bếp.
-- Database cũ (trước khi có tính năng này) được tự nâng cấp khi server khởi động (`SchemaMigrator` thêm cột
-  `orders.device_id`).
+- **Phiên bàn** = một lượt khách. Phiên **tự mở** khi khách đầu tiên quét QR (`POST /api/public/tables/{qrToken}/join`);
+  nhiều điện thoại quét cùng lúc vẫn chung một phiên (UPDATE có điều kiện `current_session_id IS NULL`).
+- Mọi điện thoại trong phiên thấy **đơn chung**; đơn ghi tên người đặt (khách nhập khi vào, trình duyệt nhớ theo phiên).
+  Mỗi trình duyệt có **mã thiết bị** (`X-Device-Id`, không bao giờ trả ra ngoài): chỉ máy đặt đơn mới huỷ được đơn đó.
+- Máy khách gửi kèm `X-Session-Id`: sau khi trả bàn, máy của lượt cũ bị từ chối (`409 SESSION_ENDED`), không đặt nhầm
+  vào lượt của khách sau.
+- **Thanh toán theo bàn**: tiền mặt (thu ngân xác nhận) hoặc **VNPay sandbox** (IPN + Return URL có chữ ký HMAC-SHA512,
+  tra cứu `querydr` trước khi cho hết hạn). Mỗi phiên tối đa một lần thanh toán đang chờ; trong lúc chờ không gọi thêm.
+- **Trả bàn** ở trang Thu ngân kết thúc phiên; còn nợ / còn món thì phải chọn lý do. Tự kết thúc phiên sau 30 phút không
+  gọi món, hoặc 30 phút sau khi đã trả đủ.
+- **Đóng bàn / Mở bàn** ở trang Quản trị = ngừng phục vụ / phục vụ lại (bảo trì); không đóng được bàn đang có khách.
+- Database cũ được tự nâng cấp khi server khởi động (`SchemaMigrator`).
 
 Kiểm thử thủ công tính năng chịu lỗi: trên màn hình bếp bấm **"Giả lập mất mạng 5s"** trong lúc đặt món từ điện thoại.
 Sau khi kết nối lại, bếp tự gửi RESUME và nhận bù các đơn bị lỡ (thanh thống kê hiện số "Gửi bù").
@@ -175,7 +183,12 @@ lạc quan hơn nhiều so với MySQL. Số liệu đưa vào báo cáo nên đ
 | `app.delivery-mode` | `RELIABLE_PUSH` | `POLLING` / `NAIVE_PUSH` / `RELIABLE_PUSH` |
 | `app.idempotency-enabled` | `true` | Chống đặt trùng bằng Idempotency-Key |
 | `app.optimistic-lock-enabled` | `true` | Kiểm tra version khi đổi trạng thái món |
-| `app.rate-limit.*` | 5 đơn/phút/bàn; 60 burst, 20 req/s mỗi IP | Token bucket |
+| `app.rate-limit.*` | 10 đơn/phút/bàn; 60 burst, 20 req/s mỗi IP | Token bucket |
+| `app.session.idle-timeout-minutes` | `30` | Phiên không gọi món quá 30 phút -> tự kết thúc |
+| `app.session.auto-checkout-after-paid-minutes` | `30` | Đã trả đủ, 30 phút chưa ai bấm Trả bàn -> tự trả bàn |
+| `app.payment.expire-minutes` | `15` | Hạn mỗi lần thanh toán |
+| `VNPAY_TMN_CODE`, `VNPAY_HASH_SECRET` (biến môi trường) | trống | Mã merchant VNPay sandbox; thiếu thì ẩn VNPay |
+| `APP_PUBLIC_URL` (biến môi trường) | trống | Địa chỉ tunnel cho Return URL của VNPay; trống thì lấy theo request |
 | `app.ws.heartbeat-ms` | `10000` | Chu kỳ heart-beat STOMP |
 | `app.ws.max-connections-per-table` | `8` | Số kết nối WebSocket tối đa mỗi bàn |
 | `app.ws.replay-batch-limit` | `500` | Số sự kiện tối đa mỗi lần gửi bù |
@@ -188,28 +201,36 @@ REST (JSON, lỗi dạng `{"error","message","details","timestamp"}`):
 
 | Method | Endpoint | Ghi chú |
 |---|---|---|
-| GET | `/api/public/config` | Chế độ giao đơn, heart-beat |
+| GET | `/api/public/config` | Chế độ giao đơn, heart-beat, cách thanh toán đang bật |
 | GET | `/api/public/tables/{qrToken}` | Mã QR → bàn |
+| POST | `/api/public/tables/{qrToken}/join` | Vào bàn: vào phiên đang có hoặc mở phiên mới; bàn ngừng phục vụ → `409 TABLE_CLOSED` |
 | GET | `/api/public/menu` | Có `ETag`, gửi `If-None-Match` → `304` |
-| POST | `/api/orders` | Header `X-Table-Token`, `X-Device-Id`, `Idempotency-Key`; `201` mới / `200` + `Idempotent-Replayed: true` |
-| GET | `/api/orders` | Đơn do **thiết bị này** đặt trong lượt khách hiện tại (bắt buộc `X-Device-Id`) |
-| POST | `/api/orders/{id}/cancel` | Chỉ đơn của thiết bị này, khi mọi món còn PENDING |
+| POST | `/api/orders` | Header `X-Table-Token`, `X-Device-Id`, `X-Session-Id`, `Idempotency-Key`; body thêm `guestName`; `201` / `200` + `Idempotent-Replayed`; `409 PAYMENT_IN_PROGRESS`, `409 SESSION_ENDED` |
+| GET | `/api/orders` | **Mọi đơn của phiên** + `mineOrderIds` (đơn do máy này đặt) |
+| POST | `/api/orders/{id}/cancel` | Chỉ máy đã đặt, khi mọi món còn PENDING |
+| GET | `/api/payments/bill` | Tổng, đã trả, còn phải trả, lần đang chờ |
+| POST | `/api/payments` | `{method: CASH | VNPAY}` + `Idempotency-Key`; VNPay trả kèm `payUrl` |
+| POST | `/api/payments/{id}/cancel` | Huỷ lần đang chờ |
+| GET | `/api/payments/vnpay/ipn` | VNPay gọi về (server-to-server), trả `{RspCode, Message}` |
+| GET | `/api/payments/vnpay/return` | Trình duyệt quay về từ VNPay → chuyển về trang gọi món |
 | POST | `/api/auth/login` | → token nhân viên |
 | GET | `/api/kitchen/orders` | Ảnh chụp ban đầu + `latestSeq` |
 | GET | `/api/kitchen/events?afterSeq=` | Dùng cho POLLING |
 | PATCH | `/api/kitchen/order-items/{id}/status` | `{status, version}` |
-| GET | `/api/kitchen/tables` | Bàn + lượt khách hiện tại (số đơn, số món chưa phục vụ); không lộ qrToken |
-| POST | `/api/kitchen/tables/{id}/reset-session[?force=true]` | **Dọn bàn**: kết thúc lượt khách cũ, mở lượt mới; `409 TABLE_HAS_ACTIVE_ORDERS` nếu còn món chưa phục vụ |
-| * | `/api/admin/...` | Bàn, thực đơn, giám sát, cấu hình |
+| GET | `/api/cashier/tables[/{id}]` | Sơ đồ bàn / chi tiết hóa đơn (CASHIER, ADMIN) |
+| POST | `/api/cashier/tables/{id}/payments` | Thu ngân tạo lần thu tiền mặt tại quầy |
+| PATCH | `/api/cashier/payments/{id}/confirm` | `{version}`: "Đã nhận tiền" (khoá lạc quan) |
+| POST | `/api/cashier/tables/{id}/checkout` | **Trả bàn** `{reason, note}`; `409 CONFIRM_REQUIRED` nếu còn nợ/còn món mà chưa có lý do |
+| * | `/api/admin/...` | Bàn (mở/đóng = phục vụ/ngừng phục vụ), thực đơn, lịch sử thanh toán, giám sát, cấu hình |
 
 WebSocket `ws://host/ws` (STOMP 1.2):
 
 | Hướng | Destination | Nội dung |
 |---|---|---|
-| Client → Server | `CONNECT` | `Authorization: Bearer <token>` (bếp) hoặc `tableToken: <qrToken>` + `deviceId: <mã thiết bị>` (khách) |
+| Client → Server | `CONNECT` | `Authorization: Bearer <token>` (bếp) hoặc `tableToken: <qrToken>` (khách) |
 | Server → Bếp | `/topic/kitchen` | `{type, seq, eventId, serverTime, payload}`: ORDER_CREATED, ITEM_STATUS_CHANGED, ORDER_CANCELLED |
-| Server → Khách | `/topic/guest.{deviceId}` | Như trên nhưng chỉ đơn của **chính thiết bị đó** (thiết bị khác subscribe → ERROR FORBIDDEN) |
-| Server → Khách | `/topic/table.{id}` | Chỉ thông báo của bàn, không có dữ liệu đơn: TABLE_CLOSED, TABLE_SESSION_RESET |
+| Server → Khách | `/topic/table.{id}` | Đơn chung của phiên (như trên, không lộ mã thiết bị), PAYMENT_UPDATED, TABLE_SESSION_ENDED, TABLE_CLOSED |
+| Server → Thu ngân | `/topic/cashier` | TABLE_STATE_CHANGED, PAYMENT_UPDATED (chỉ CASHIER, ADMIN) |
 | Server → Tất cả | `/topic/menu` | MENU_UPDATED |
 | Bếp → Server | `/app/ack` | `{seq}` |
 | Bếp → Server | `/app/resume` | `{lastSeq}` → server trả `/user/queue/replay`: `{type:"REPLAY_BATCH", latestSeq, hasMore, events[]}` |

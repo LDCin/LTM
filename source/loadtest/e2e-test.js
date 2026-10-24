@@ -112,9 +112,11 @@ async function setup() {
   if (admin.status !== 200) throw new Error(`Không đăng nhập được admin (HTTP ${admin.status}). Server đã chạy chưa?`);
   ctx.admin = admin.data.token;
   ctx.bep = (await call('POST', '/api/auth/login', { body: { username: 'bep', password: 'bep123' } })).data.token;
+  ctx.thungan = (await call('POST', '/api/auth/login', { body: { username: 'thungan', password: 'thungan123' } })).data?.token;
+  if (!ctx.thungan) throw new Error('Không đăng nhập được tài khoản thu ngân thungan/thungan123');
   ctx.originalSettings = (await call('GET', '/api/admin/settings', { token: ctx.admin })).data;
   await setSettings({ deliveryMode: 'RELIABLE_PUSH', idempotencyEnabled: true, optimisticLockEnabled: true, rateLimitEnabled: false, trustForwardedFor: false });
-  const tables = (await call('POST', '/api/admin/tables/bulk', { token: ctx.admin, body: { prefix: 'LTE', count: 6, open: true } })).data;
+  const tables = (await call('POST', '/api/admin/tables/bulk', { token: ctx.admin, body: { prefix: 'LTE', count: 8, open: true } })).data;
   await call('POST', '/api/admin/maintenance/clear-test-orders', { token: ctx.admin });
   ctx.tables = tables;
   ctx.t1 = tables[0];
@@ -254,11 +256,10 @@ async function testRealtime() {
   check('Thoả thuận heart-beat 10000,10000', kitchen.frame?.headers['heart-beat'] === '10000,10000', kitchen.frame?.headers);
   const c1 = await stomp({ tableToken: ctx.t1.qrToken });
   const c2 = await stomp({ tableToken: ctx.t2.qrToken, deviceId: DEV_B });
-  check('Khách CONNECT bằng tableToken + deviceId -> CONNECTED', c1.connected && c2.connected, [c1.errors, c2.errors]);
+  check('Khách CONNECT bằng tableToken -> CONNECTED', c1.connected && c2.connected, [c1.errors, c2.errors]);
   const kMsgs = collect(kitchen, '/topic/kitchen');
   const replays = collect(kitchen, '/user/queue/replay');
-  const c1Msgs = collect(c1, `/topic/guest.${DEV_A}`);
-  const c2Msgs = collect(c2, `/topic/guest.${DEV_B}`);
+  const c1Msgs = collect(c1, `/topic/table.${ctx.t1.id}`);
   const c2TableMsgs = collect(c2, `/topic/table.${ctx.t2.id}`);
   await sleep(300);
 
@@ -267,9 +268,10 @@ async function testRealtime() {
   const created = kMsgs.find((m) => m.type === 'ORDER_CREATED' && m.payload?.id === order.data.id);
   check('Bếp nhận ORDER_CREATED qua WebSocket', !!created, kMsgs.map((m) => m.type));
   check('Envelope có seq, eventId, serverTime, payload', created && typeof created.seq === 'number' && created.eventId?.length === 36 && created.serverTime > 0 && created.payload.items.length === 1, created);
-  check('Máy đặt đơn nhận ORDER_CREATED trên topic riêng /topic/guest.{deviceId}', c1Msgs.some((m) => m.type === 'ORDER_CREATED' && m.payload.id === order.data.id), c1Msgs.length);
+  check('Khách của bàn nhận ORDER_CREATED trên /topic/table.{id}, payload không lộ mã thiết bị',
+    c1Msgs.some((m) => m.type === 'ORDER_CREATED' && m.payload.id === order.data.id) && !JSON.stringify(c1Msgs).includes(DEV_A), c1Msgs.length);
   await sleep(300);
-  check('Khách bàn khác KHÔNG nhận sự kiện của bàn này', c2Msgs.length === 0 && c2TableMsgs.length === 0, [c2Msgs, c2TableMsgs]);
+  check('Khách bàn khác KHÔNG nhận sự kiện của bàn này', c2TableMsgs.length === 0, c2TableMsgs);
 
   kitchen.client.send('/app/ack', { seq: created.seq });
   await sleep(300);
@@ -479,37 +481,51 @@ async function testStock() {
 async function testTables() {
   const code = `LTX${Date.now() % 100000}`;
   const created = await call('POST', '/api/admin/tables', { token: ctx.admin, body: { code } });
-  check('Tạo bàn mới -> 201, trạng thái CLOSED, có qrToken 24 ký tự', created.status === 201 && created.data.status === 'CLOSED' && created.data.qrToken.length === 24, created.data);
+  check('Tạo bàn mới -> 201, đang phục vụ (OPEN), chưa có phiên, có qrToken 24 ký tự',
+    created.status === 201 && created.data.status === 'OPEN' && created.data.sessionId === null && created.data.qrToken.length === 24, created.data);
   const dup = await call('POST', '/api/admin/tables', { token: ctx.admin, body: { code } });
   check('Trùng mã bàn -> 409', dup.status === 409, dup.data);
   const invalid = await call('POST', '/api/admin/tables', { token: ctx.admin, body: { code: 'a b' } });
   check('Mã bàn chứa khoảng trắng -> 400', invalid.status === 400, invalid.status);
   const tok = created.data.qrToken;
-  const closedOrder = await placeOrder(tok, [{ menuItemId: ctx.pho.id, quantity: 1 }]);
-  check('Đặt món khi bàn đóng -> 409 TABLE_CLOSED', closedOrder.status === 409 && closedOrder.data.error === 'TABLE_CLOSED', closedOrder.data);
-  const opened = await call('POST', `/api/admin/tables/${created.data.id}/open`, { token: ctx.admin });
-  check('Mở bàn -> OPEN, có phiên', opened.data.status === 'OPEN' && opened.data.sessionId > 0, opened.data);
+  const id = created.data.id;
+  const noSession = await placeOrder(tok, [{ menuItemId: ctx.pho.id, quantity: 1 }]);
+  check('Đặt món khi chưa vào bàn (chưa có phiên) -> 409 SESSION_ENDED', noSession.status === 409 && noSession.data.error === 'SESSION_ENDED', noSession.data);
+
+  const joined = await call('POST', `/api/public/tables/${tok}/join`, { tableToken: tok });
+  check('Khách đầu tiên vào bàn -> phiên tự mở (newSession = true)', joined.status === 200 && joined.data.sessionId > 0 && joined.data.newSession === true, joined.data);
+  const joinedB = await call('POST', `/api/public/tables/${tok}/join`, { tableToken: tok, headers: { 'X-Device-Id': DEV_B } });
+  check('Máy thứ hai vào cùng phiên (newSession = false)', joinedB.data.sessionId === joined.data.sessionId && joinedB.data.newSession === false, joinedB.data);
   const ok = await placeOrder(tok, [{ menuItemId: ctx.pho.id, quantity: 1 }]);
-  check('Bàn mở -> đặt món được', ok.status === 201, ok.status);
+  check('Đã vào bàn -> đặt món được', ok.status === 201, ok.status);
+
+  const closeBusy = await call('POST', `/api/admin/tables/${id}/close`, { token: ctx.admin });
+  check('Admin đóng bàn (ngừng phục vụ) khi đang có khách -> 409 TABLE_HAS_GUESTS', closeBusy.status === 409 && closeBusy.data.error === 'TABLE_HAS_GUESTS', closeBusy.data);
+  await call('POST', `/api/cashier/tables/${id}/checkout`, { token: ctx.thungan, body: { reason: 'OTHER', note: 'e2e' } });
+
   const cust = await stomp({ tableToken: tok });
-  const msgs = collect(cust, `/topic/table.${created.data.id}`);
+  const msgs = collect(cust, `/topic/table.${id}`);
   await sleep(200);
-  const closed = await call('POST', `/api/admin/tables/${created.data.id}/close`, { token: ctx.admin });
-  check('Đóng bàn -> CLOSED', closed.data.status === 'CLOSED' && closed.data.sessionId === null, closed.data);
+  const closed = await call('POST', `/api/admin/tables/${id}/close`, { token: ctx.admin });
+  check('Bàn trống -> admin đóng bàn được, trạng thái CLOSED', closed.status === 200 && closed.data.status === 'CLOSED' && closed.data.sessionId === null, closed.data);
   await waitFor(() => msgs.some((m) => m.type === 'TABLE_CLOSED'), 2000);
-  check('Khách nhận TABLE_CLOSED qua WebSocket', msgs.some((m) => m.type === 'TABLE_CLOSED'), msgs);
+  check('Khách đang mở trang nhận TABLE_CLOSED qua WebSocket', msgs.some((m) => m.type === 'TABLE_CLOSED'), msgs);
   cust.client.disconnect();
-  const afterClose = await call('GET', '/api/orders', { tableToken: tok });
-  check('Sau khi đóng: GET đơn vẫn chạy, open=false, danh sách rỗng (phiên mới)', afterClose.status === 200 && afterClose.data.table.open === false && afterClose.data.orders.length === 0, afterClose.data);
-  await call('POST', `/api/admin/tables/${created.data.id}/open`, { token: ctx.admin });
-  const reopened = await call('GET', '/api/orders', { tableToken: tok });
-  check('Mở lại bàn -> phiên mới, không thấy đơn của khách trước', reopened.data.table.open && reopened.data.orders.length === 0, reopened.data.orders.length);
-  const rotated = await call('POST', `/api/admin/tables/${created.data.id}/rotate-token`, { token: ctx.admin });
+  const joinClosed = await call('POST', `/api/public/tables/${tok}/join`, { tableToken: tok });
+  check('Quét QR bàn đang ngừng phục vụ -> 409 TABLE_CLOSED, không mở phiên', joinClosed.status === 409 && joinClosed.data.error === 'TABLE_CLOSED', joinClosed.data);
+  await call('POST', `/api/admin/tables/${id}/open`, { token: ctx.admin });
+  const rejoin = await call('POST', `/api/public/tables/${tok}/join`, { tableToken: tok });
+  check('Mở bàn lại -> khách vào được, phiên mới, không thấy đơn của khách trước',
+    rejoin.status === 200 && rejoin.data.sessionId !== joined.data.sessionId
+    && (await call('GET', '/api/orders', { tableToken: tok, headers: { 'X-Session-Id': String(rejoin.data.sessionId) } })).data.orders.length === 0, rejoin.data);
+  await call('POST', `/api/cashier/tables/${id}/checkout`, { token: ctx.thungan, body: {} });
+
+  const rotated = await call('POST', `/api/admin/tables/${id}/rotate-token`, { token: ctx.admin });
   check('Đổi mã QR -> token mới khác token cũ', rotated.status === 200 && rotated.data.qrToken !== tok, rotated.data);
   const oldTok = await call('GET', `/api/public/tables/${tok}`);
   const newTok = await call('GET', `/api/public/tables/${rotated.data.qrToken}`);
   check('Mã QR cũ không dùng được nữa (401), mã mới dùng được', oldTok.status === 401 && newTok.status === 200, [oldTok.status, newTok.status]);
-  await call('POST', `/api/admin/tables/${created.data.id}/close`, { token: ctx.admin });
+  await call('POST', `/api/admin/tables/${id}/close`, { token: ctx.admin });
 }
 
 async function testMenuAdmin() {
@@ -545,7 +561,7 @@ async function testMonitorAndModes() {
   const kitchen = await stomp({ Authorization: `Bearer ${ctx.bep}` });
   const kMsgs = collect(kitchen, '/topic/kitchen');
   const cust = await stomp({ tableToken: ctx.t1.qrToken });
-  const cMsgs = collect(cust, `/topic/guest.${DEV_A}`);
+  const cMsgs = collect(cust, `/topic/table.${ctx.t1.id}`);
   await sleep(200);
 
   await setSettings({ deliveryMode: 'POLLING' });
@@ -585,7 +601,7 @@ async function testRateLimit() {
   await setSettings({ rateLimitEnabled: true, trustForwardedFor: true });
   const t = ctx.tables[3];
   const results = [];
-  for (let i = 0; i < 7; i++) {
+  for (let i = 0; i < 12; i++) {
     results.push(await call('POST', '/api/orders', {
       tableToken: t.qrToken,
       headers: { 'Idempotency-Key': randomKey(), 'X-Forwarded-For': '10.9.9.1' },
@@ -593,8 +609,8 @@ async function testRateLimit() {
     }));
   }
   const codes = results.map((r) => r.status);
-  check('Một bàn đặt 7 đơn liên tiếp -> 5 đơn đầu 201, sau đó 429', codes.slice(0, 5).every((c) => c === 201) && codes.slice(5).every((c) => c === 429), codes);
-  const limited = results[6];
+  check('Một bàn (chung mọi điện thoại) đặt 12 đơn liên tiếp -> 10 đơn đầu 201, sau đó 429', codes.slice(0, 10).every((c) => c === 201) && codes.slice(10).every((c) => c === 429), codes);
+  const limited = results[11];
   check('429 có header Retry-After và mã RATE_LIMITED', !!limited.headers.get('retry-after') && limited.data.error === 'RATE_LIMITED', [limited.headers.get('retry-after'), limited.data]);
   const otherTable = await call('POST', '/api/orders', {
     tableToken: ctx.tables[4].qrToken,
@@ -651,94 +667,161 @@ async function testReliableFeed() {
   await setSettings({ deliveryMode: 'RELIABLE_PUSH' });
 }
 
-async function testPrivacyAndTableReset() {
-  // Bàn riêng cho nhóm test này
-  const table = ctx.tables[4];
+async function testSharedSessionAndNames() {
+  const table = ctx.tables[6];
   const tok = table.qrToken;
   const asB = { 'X-Device-Id': DEV_B };
   const line = [{ menuItemId: ctx.pho.id, quantity: 1 }];
-  // Bắt đầu từ một lượt khách sạch (các nhóm test trước có thể đã đặt đơn ở bàn này)
-  await call('POST', `/api/kitchen/tables/${table.id}/reset-session?force=true`, { token: ctx.bep });
+  // Bắt đầu từ một lượt khách sạch rồi cho 2 "điện thoại" vào bàn
+  await call('POST', `/api/cashier/tables/${table.id}/checkout`, { token: ctx.thungan, body: { reason: 'OTHER' } });
+  const joinA = (await call('POST', `/api/public/tables/${tok}/join`, { tableToken: tok })).data;
+  const joinB = (await call('POST', `/api/public/tables/${tok}/join`, { tableToken: tok, headers: asB })).data;
+  check('Hai điện thoại quét cùng QR -> cùng một phiên', joinA.sessionId === joinB.sessionId && joinA.sessionId > 0, [joinA, joinB]);
+  const session = { 'X-Session-Id': String(joinA.sessionId) };
 
-  const missing = await http.call('GET', '/api/orders', { tableToken: tok });
-  check('GET đơn không có X-Device-Id -> 400', missing.status === 400, missing.status);
-  const badDev = await call('GET', '/api/orders', { tableToken: tok, headers: { 'X-Device-Id': 'abc' } });
-  check('X-Device-Id sai định dạng -> 400', badDev.status === 400, badDev.status);
+  const other = ctx.tables[7];
+  await call('POST', `/api/cashier/tables/${other.id}/checkout`, { token: ctx.thungan, body: { reason: 'OTHER' } });
+  const racers = await Promise.all(Array.from({ length: 6 }, () =>
+    call('POST', `/api/public/tables/${other.qrToken}/join`, { tableToken: other.qrToken, headers: { 'X-Device-Id': randomKey() } })));
+  check('6 máy vào bàn trống cùng lúc -> chung 1 phiên', new Set(racers.map((r) => r.data?.sessionId)).size === 1, racers.map((r) => r.data?.sessionId));
 
-  const custA = await stomp({ tableToken: tok });
-  const custB = await stomp({ tableToken: tok, deviceId: DEV_B });
-  const aGuest = collect(custA, `/topic/guest.${DEV_A}`);
-  const aTable = collect(custA, `/topic/table.${table.id}`);
-  const bGuest = collect(custB, `/topic/guest.${DEV_B}`);
+  const custB = await stomp({ tableToken: tok });
   const bTable = collect(custB, `/topic/table.${table.id}`);
+  await sleep(300);
+  const orderA = (await call('POST', '/api/orders', {
+    tableToken: tok,
+    headers: { ...session, 'Idempotency-Key': randomKey() },
+    body: { items: line, guestName: '  Minh   Anh ' },
+  })).data;
+  check('Tên khách được chuẩn hoá và lưu kèm đơn', orderA.guestName === 'Minh Anh', orderA.guestName);
+  check('Đơn đầu tiên của phiên có cờ firstInSession', orderA.firstInSession === true, orderA.firstInSession);
+  await waitFor(() => bTable.some((m) => m.type === 'ORDER_CREATED' && m.payload.id === orderA.id), 3000);
+  check('Máy B (cùng bàn) nhận ORDER_CREATED của máy A ngay lập tức', bTable.some((m) => m.type === 'ORDER_CREATED' && m.payload.id === orderA.id));
+
+  const viewA = (await call('GET', '/api/orders', { tableToken: tok, headers: session })).data;
+  const viewB = (await call('GET', '/api/orders', { tableToken: tok, headers: { ...asB, ...session } })).data;
+  check('Máy B thấy đơn của máy A trong danh sách chung', viewB.orders.some((o) => o.id === orderA.id), viewB.orders.map((o) => o.id));
+  check('mineOrderIds: máy A biết đơn là của mình, máy B thì không',
+    viewA.mineOrderIds.includes(orderA.id) && !viewB.mineOrderIds.includes(orderA.id), [viewA.mineOrderIds, viewB.mineOrderIds]);
+  check('Phản hồi không lộ mã thiết bị', !JSON.stringify(viewB).includes(DEV_A));
+  const cancelByB = await call('POST', `/api/orders/${orderA.id}/cancel`, { tableToken: tok, headers: { ...asB, ...session } });
+  check('Máy B không huỷ được đơn của máy A (404)', cancelByB.status === 404, cancelByB.status);
+  const second = (await call('POST', '/api/orders', { tableToken: tok, headers: { ...asB, ...session, 'Idempotency-Key': randomKey() }, body: { items: line } })).data;
+  check('Đơn thứ hai của phiên không còn cờ firstInSession', second.firstInSession === false, second.firstInSession);
+
+  const snap = (await call('GET', '/api/kitchen/orders', { token: ctx.bep })).data;
+  const onKitchen = snap.orders.find((o) => o.id === orderA.id);
+  check('Bếp thấy tên khách và nhãn Bàn mới mở', onKitchen?.guestName === 'Minh Anh' && onKitchen.firstInSession === true, onKitchen);
+
+  // Trả bàn -> lượt khách cũ bị chặn, lượt mới không thấy gì
+  const needReason = await call('POST', `/api/cashier/tables/${table.id}/checkout`, { token: ctx.thungan, body: {} });
+  check('Trả bàn khi còn nợ / còn món -> 409 CONFIRM_REQUIRED kèm số tiền',
+    needReason.status === 409 && needReason.data.error === 'CONFIRM_REQUIRED' && needReason.data.details.remaining > 0, needReason.data);
+  const out = await call('POST', `/api/cashier/tables/${table.id}/checkout`, { token: ctx.thungan, body: { reason: 'UNPAID_LEFT', note: 'e2e' } });
+  check('Trả bàn với lý do "khách bỏ về" -> bàn trống', out.status === 200 && out.data.state === 'EMPTY', out.data);
+  await waitFor(() => bTable.some((m) => m.type === 'TABLE_SESSION_ENDED'), 3000);
+  check('Khách đang mở trang nhận TABLE_SESSION_ENDED', bTable.some((m) => m.type === 'TABLE_SESSION_ENDED'));
+  const late = await call('POST', '/api/orders', { tableToken: tok, headers: { ...session, 'Idempotency-Key': randomKey() }, body: { items: line } });
+  check('Máy của lượt cũ gửi đơn kèm phiên cũ -> 409 SESSION_ENDED', late.status === 409 && late.data.error === 'SESSION_ENDED', late.data);
+  const stillOnKitchen = (await call('GET', '/api/kitchen/orders', { token: ctx.bep })).data.orders.some((o) => o.id === orderA.id);
+  check('Đơn chưa xong của lượt cũ vẫn còn trên màn hình bếp (không bị mất)', stillOnKitchen);
+  custB.client.disconnect();
+}
+
+async function testPaymentsAndCashier() {
+  const table = ctx.tables[7];
+  const tok = table.qrToken;
+  await call('POST', `/api/cashier/tables/${table.id}/checkout`, { token: ctx.thungan, body: { reason: 'OTHER' } });
+  const join = (await call('POST', `/api/public/tables/${tok}/join`, { tableToken: tok })).data;
+  const session = { 'X-Session-Id': String(join.sessionId) };
+  const order = (await call('POST', '/api/orders', {
+    tableToken: tok,
+    headers: { ...session, 'Idempotency-Key': randomKey() },
+    body: { items: [{ menuItemId: ctx.pho.id, quantity: 2 }] },
+  })).data;
+
+  const bill = (await call('GET', '/api/payments/bill', { tableToken: tok, headers: session })).data;
+  check('Hóa đơn: tổng do server tính, còn phải trả = tổng', bill.total === ctx.pho.price * 2 && bill.remaining === bill.total && bill.methods.includes('CASH'), bill);
+
+  const cashierWs = await stomp({ Authorization: `Bearer ${ctx.thungan}` });
+  const cashierMsgs = collect(cashierWs, '/topic/cashier');
+  const kitchenOnCashier = await stomp({ Authorization: `Bearer ${ctx.bep}` });
+  collect(kitchenOnCashier, '/topic/cashier');
+  await waitFor(() => kitchenOnCashier.errors.length > 0, 2000);
+  check('Tài khoản bếp subscribe /topic/cashier -> ERROR FORBIDDEN', kitchenOnCashier.errors.some((e) => e.includes('FORBIDDEN')), kitchenOnCashier.errors);
+  const custWs = await stomp({ tableToken: tok });
+  const custMsgs = collect(custWs, `/topic/table.${table.id}`);
   await sleep(300);
 
   const key = randomKey();
-  const orderA = (await placeOrder(tok, line, key)).data;
-  await waitFor(() => aGuest.some((m) => m.payload?.id === orderA.id), 3000);
-  await sleep(300);
-  const listA = (await call('GET', '/api/orders', { tableToken: tok })).data.orders;
-  const listB = (await call('GET', '/api/orders', { tableToken: tok, headers: asB })).data.orders;
-  check('Máy A thấy đơn mình vừa đặt', listA.some((o) => o.id === orderA.id), listA.map((o) => o.id));
-  check('Máy B quét CÙNG mã QR không thấy đơn của máy A', !listB.some((o) => o.id === orderA.id), listB.map((o) => o.id));
-  check('Máy A nhận sự kiện realtime của đơn mình', aGuest.some((m) => m.type === 'ORDER_CREATED' && m.payload.id === orderA.id));
-  check('Máy B KHÔNG nhận sự kiện nào về đơn của máy A (cả topic riêng lẫn topic bàn)', bGuest.length === 0 && bTable.length === 0, [bGuest, bTable]);
-  const cancelByB = await call('POST', `/api/orders/${orderA.id}/cancel`, { tableToken: tok, headers: asB });
-  check('Máy B không huỷ được đơn của máy A (404)', cancelByB.status === 404, cancelByB.status);
-  const stolenKey = await placeOrder(tok, line, key);
-  check('Máy A gửi lại cùng key -> nhận lại đúng đơn của mình', stolenKey.status === 200 && stolenKey.data.id === orderA.id);
-  const reuseByB = await call('POST', '/api/orders', { tableToken: tok, headers: { ...asB, 'Idempotency-Key': key }, body: { items: line } });
-  check('Máy B dùng lại key của máy A -> 409, không lấy được đơn của máy A', reuseByB.status === 409 && reuseByB.data.id === undefined, reuseByB.data);
+  const pay = await call('POST', '/api/payments', { tableToken: tok, headers: { ...session, 'Idempotency-Key': key }, body: { method: 'CASH' } });
+  check('Khách bấm Thanh toán (tiền mặt) -> 201 PENDING, số tiền = còn phải trả', pay.status === 201 && pay.data.status === 'PENDING' && pay.data.amount === bill.remaining, pay.data);
+  const again = await call('POST', '/api/payments', { tableToken: tok, headers: { ...session, 'Idempotency-Key': key }, body: { method: 'CASH' } });
+  check('Gửi lại cùng Idempotency-Key -> 200, cùng lần thanh toán', again.status === 200 && again.data.id === pay.data.id, again.status);
+  const otherPhone = await call('POST', '/api/payments', {
+    tableToken: tok,
+    headers: { ...session, 'X-Device-Id': DEV_B, 'Idempotency-Key': randomKey() },
+    body: { method: 'CASH' },
+  });
+  check('Máy khác bấm Thanh toán -> nhận lại lần đang chờ, không tạo lần thứ hai', otherPhone.data.id === pay.data.id, otherPhone.data);
+  const blocked = await call('POST', '/api/orders', {
+    tableToken: tok,
+    headers: { ...session, 'Idempotency-Key': randomKey() },
+    body: { items: [{ menuItemId: ctx.pho.id, quantity: 1 }] },
+  });
+  check('Đang thanh toán -> chưa gọi thêm được (409 PAYMENT_IN_PROGRESS)', blocked.status === 409 && blocked.data.error === 'PAYMENT_IN_PROGRESS', blocked.data);
+  await waitFor(() => cashierMsgs.some((m) => m.type === 'PAYMENT_UPDATED'), 3000);
+  check('Quầy thu ngân nhận PAYMENT_UPDATED real-time', cashierMsgs.some((m) => m.type === 'PAYMENT_UPDATED' && m.payment.id === pay.data.id));
 
-  const spy = await stomp({ tableToken: tok, deviceId: DEV_B });
-  collect(spy, `/topic/guest.${DEV_A}`);
-  await waitFor(() => spy.errors.length > 0, 2000);
-  check('Máy B subscribe topic riêng của máy A -> ERROR FORBIDDEN', spy.errors.some((e) => e.includes('FORBIDDEN')), spy.errors);
-  spy.client.disconnect();
-  const noDevice = await stomp({ tableToken: tok, deviceId: undefined });
-  check('Khách CONNECT thiếu deviceId -> ERROR INVALID_DEVICE_ID', !noDevice.connected && noDevice.errors.some((e) => e.includes('INVALID_DEVICE_ID')), noDevice.errors);
+  const map = (await call('GET', '/api/cashier/tables', { token: ctx.thungan })).data;
+  check('Sơ đồ bàn không hiện bàn của bộ test (mã LT...)', map.every((t) => !t.code.startsWith('LT')), map.length);
+  const detail = (await call('GET', `/api/cashier/tables/${table.id}`, { token: ctx.thungan })).data;
+  check('Chi tiết bàn: trạng thái AWAITING_PAYMENT, có lần đang chờ', detail.table.state === 'AWAITING_PAYMENT' && detail.bill.pending.id === pay.data.id, detail.table);
+  const kitchenCalls = await call('GET', '/api/cashier/tables', { token: ctx.bep });
+  check('Tài khoản bếp gọi API thu ngân -> 403', kitchenCalls.status === 403, kitchenCalls.status);
+  const checkoutWhilePending = await call('POST', `/api/cashier/tables/${table.id}/checkout`, { token: ctx.thungan, body: {} });
+  check('Trả bàn khi đang có lần chờ -> 409 PAYMENT_IN_PROGRESS',
+    checkoutWhilePending.status === 409 && checkoutWhilePending.data.error === 'PAYMENT_IN_PROGRESS', checkoutWhilePending.data);
 
-  // ---- Dọn bàn
-  const list = await call('GET', '/api/kitchen/tables', { token: ctx.bep });
-  const row = list.data?.find((t) => t.id === table.id);
-  check('Tài khoản bếp xem được danh sách bàn', list.status === 200 && Array.isArray(list.data), list.status);
-  check('Danh sách bàn cho bếp KHÔNG lộ qrToken', list.status === 200 && list.data.every((t) => !('qrToken' in t)));
-  const custList = await http.call('GET', '/api/kitchen/tables', { tableToken: tok });
-  check('Khách (không có token nhân viên) không gọi được API bàn -> 401', custList.status === 401, custList.status);
-  // Bàn LTE bị ẩn khỏi danh sách -> kiểm tra số liệu bằng một bàn thật (B12) ở cuối
-  check('Danh sách ẩn bàn load test (mã LT...)', !row, row);
+  const confirms = await Promise.all([0, 1].map(() =>
+    call('PATCH', `/api/cashier/payments/${pay.data.id}/confirm`, { token: ctx.thungan, body: { version: pay.data.version } })));
+  check('Hai thu ngân cùng bấm "Đã nhận tiền" -> đúng 1 thành công, 1 nhận 409',
+    confirms.filter((r) => r.status === 200).length === 1 && confirms.filter((r) => r.status === 409).length === 1, confirms.map((r) => r.status));
+  await waitFor(() => custMsgs.some((m) => m.type === 'PAYMENT_UPDATED' && m.payment.status === 'PAID'), 3000);
+  check('Điện thoại khách nhận PAYMENT_UPDATED (PAID)', custMsgs.some((m) => m.type === 'PAYMENT_UPDATED' && m.payment.status === 'PAID'));
+  const paidBill = (await call('GET', '/api/payments/bill', { tableToken: tok, headers: session })).data;
+  check('Sau khi trả: còn phải trả = 0, không còn lần chờ', paidBill.remaining === 0 && paidBill.pending === null, paidBill);
+  const nothing = await call('POST', '/api/payments', { tableToken: tok, headers: { ...session, 'Idempotency-Key': randomKey() }, body: { method: 'CASH' } });
+  check('Đã trả đủ mà bấm Thanh toán nữa -> 422 NOTHING_TO_PAY', nothing.status === 422 && nothing.data.error === 'NOTHING_TO_PAY', nothing.data);
+  const extra = await call('POST', '/api/orders', {
+    tableToken: tok,
+    headers: { ...session, 'Idempotency-Key': randomKey() },
+    body: { items: [{ menuItemId: ctx.flan.id, quantity: 1 }] },
+  });
+  const afterExtra = (await call('GET', '/api/payments/bill', { tableToken: tok, headers: session })).data;
+  check('Trả xong vẫn gọi thêm được, phần mới thành "còn phải trả"', extra.status === 201 && afterExtra.remaining === ctx.flan.price, afterExtra);
 
-  const noForce = await call('POST', `/api/kitchen/tables/${table.id}/reset-session`, { token: ctx.bep });
-  check('Dọn bàn còn món chưa phục vụ -> 409 TABLE_HAS_ACTIVE_ORDERS', noForce.status === 409 && noForce.data.error === 'TABLE_HAS_ACTIVE_ORDERS' && noForce.data.details.activeItemCount === 1, noForce.data);
-  const before = (await call('GET', `/api/public/tables/${tok}`)).data;
-  const forced = await call('POST', `/api/kitchen/tables/${table.id}/reset-session?force=true`, { token: ctx.bep });
-  check('Dọn bàn với force=true -> 200, phiên mới, 0 đơn', forced.status === 200 && forced.data.status === 'OPEN' && forced.data.orderCount === 0, forced.data);
-  await waitFor(() => aTable.some((m) => m.type === 'TABLE_SESSION_RESET') && bTable.some((m) => m.type === 'TABLE_SESSION_RESET'), 3000);
-  check('Khách đang mở trang nhận TABLE_SESSION_RESET', aTable.some((m) => m.type === 'TABLE_SESSION_RESET') && bTable.some((m) => m.type === 'TABLE_SESSION_RESET'));
-  const afterReset = (await call('GET', '/api/orders', { tableToken: tok })).data;
-  check('Sau khi dọn bàn: chính máy A cũng không còn thấy đơn cũ', afterReset.orders.length === 0 && afterReset.table.open, afterReset);
-  const snap = (await call('GET', '/api/kitchen/orders', { token: ctx.bep })).data;
-  check('Đơn chưa xong của lượt cũ vẫn còn trên màn hình bếp (không bị mất)', snap.orders.some((o) => o.id === orderA.id));
-  const newOrder = await placeOrder(tok, line);
-  check('Lượt khách mới đặt món bình thường', newOrder.status === 201 && newOrder.data.sessionId !== orderA.sessionId, newOrder.data?.sessionId);
-  const sameTableStill = await call('GET', `/api/public/tables/${tok}`);
-  check('Dọn bàn không đổi mã QR (QR in trên bàn vẫn dùng được)', sameTableStill.status === 200 && before.code === sameTableStill.data.code);
-  await call('PATCH', `/api/kitchen/order-items/${newOrder.data.items[0].id}/status`, { token: ctx.bep, body: { status: 'CANCELLED', version: 0 } });
-  const clean = await call('POST', `/api/kitchen/tables/${table.id}/reset-session`, { token: ctx.bep });
-  check('Bàn không còn món đang làm -> dọn được ngay, không cần force', clean.status === 200, clean.data);
-
-  // Số liệu trên danh sách bàn (dùng bàn thật B12, sau đó dọn lại cho sạch)
-  const b12 = (await call('GET', '/api/kitchen/tables', { token: ctx.bep })).data.find((t) => t.code === 'B12');
-  if (b12) {
-    await call('POST', `/api/kitchen/tables/${b12.id}/reset-session?force=true`, { token: ctx.bep });
-    const b12Token = (await call('GET', '/api/admin/tables', { token: ctx.admin })).data.find((t) => t.code === 'B12').qrToken;
-    const o = (await placeOrder(b12Token, [{ menuItemId: ctx.pho.id, quantity: 2 }])).data;
-    const stats = (await call('GET', '/api/kitchen/tables', { token: ctx.bep })).data.find((t) => t.code === 'B12');
-    check('Danh sách bàn hiện đúng số đơn và số món chưa phục vụ', stats.orderCount === 1 && stats.activeItemCount === 1 && stats.sessionOpenedAt > 0, stats);
-    await call('PATCH', `/api/kitchen/order-items/${o.items[0].id}/status`, { token: ctx.bep, body: { status: 'CANCELLED', version: 0 } });
-    await call('POST', `/api/kitchen/tables/${b12.id}/reset-session`, { token: ctx.bep });
+  if (bill.methods.includes('VNPAY')) {
+    const vp = await call('POST', '/api/payments', { tableToken: tok, headers: { ...session, 'Idempotency-Key': randomKey() }, body: { method: 'VNPAY' } });
+    check('VNPay đã cấu hình: tạo thanh toán có link sang VNPay', vp.status === 201 && (vp.data.payUrl || '').includes('vnp_SecureHash='), vp.data);
+    const fake = await call('GET', '/api/payments/vnpay/ipn?vnp_TxnRef=X&vnp_Amount=100&vnp_ResponseCode=00&vnp_SecureHash=abc');
+    check('IPN giả mạo (sai chữ ký) -> RspCode 97, không ghi nhận', fake.data?.RspCode === '97', fake.data);
+    const cancel = await call('POST', `/api/payments/${vp.data.id}/cancel`, { tableToken: tok, headers: session });
+    check('Khách huỷ lần thanh toán VNPay đang chờ', cancel.status === 200 && cancel.data.status === 'CANCELLED', cancel.data);
+  } else {
+    const vp = await call('POST', '/api/payments', { tableToken: tok, headers: { ...session, 'Idempotency-Key': randomKey() }, body: { method: 'VNPAY' } });
+    check('VNPay chưa cấu hình -> 422 PAYMENT_METHOD_UNAVAILABLE', vp.status === 422 && vp.data.error === 'PAYMENT_METHOD_UNAVAILABLE', vp.data);
   }
-  [custA, custB].forEach((s) => s.client.disconnect());
+
+  await call('PATCH', `/api/kitchen/order-items/${order.items[0].id}/status`, { token: ctx.bep, body: { status: 'ACCEPTED', version: 0 } });
+  const payAll = (await call('POST', `/api/cashier/tables/${table.id}/payments`, { token: ctx.thungan })).data;
+  check('Thu ngân tạo lần thu tiền mặt tại quầy cho phần còn lại', payAll.amount === ctx.flan.price && payAll.method === 'CASH', payAll);
+  await call('PATCH', `/api/cashier/payments/${payAll.id}/confirm`, { token: ctx.thungan, body: { version: payAll.version } });
+  const done = await call('POST', `/api/cashier/tables/${table.id}/checkout`, { token: ctx.thungan, body: { reason: 'OTHER', note: 'món chưa ra' } });
+  check('Trả bàn sau khi thanh toán -> bàn trống', done.status === 200 && done.data.state === 'EMPTY', done.data);
+  const history = (await call('GET', '/api/admin/payments?limit=20', { token: ctx.admin })).data;
+  check('Admin xem được lịch sử thanh toán', history.some((p) => p.id === pay.data.id && p.status === 'PAID' && p.confirmedBy === 'thungan'), history.length);
+  [cashierWs, kitchenOnCashier, custWs].forEach((s) => s.client.disconnect());
 }
 
 // ================================================================== chạy
@@ -760,12 +843,13 @@ async function testPrivacyAndTableReset() {
   await section('7. Bếp: state machine và optimistic locking', testKitchenAndStateMachine);
   await section('8. Khách huỷ đơn', testCancel);
   await section('9. Tồn kho và hết món', testStock);
-  await section('10. Quản lý bàn: mở/đóng/đổi mã QR', testTables);
+  await section('10. Bàn: vào bàn, ngừng/phục vụ lại, đổi mã QR', testTables);
   await section('11. Quản lý thực đơn', testMenuAdmin);
   await section('12. Giám sát và các chế độ baseline', testMonitorAndModes);
   await section('13. Rate limiting', testRateLimit);
   await section('14. Giao đơn tin cậy khi bếp mất mạng (thư viện client)', testReliableFeed);
-  await section('15. Riêng tư: đơn theo thiết bị và Dọn bàn', testPrivacyAndTableReset);
+  await section('15. Phiên bàn: nhiều điện thoại, đơn chung, tên khách, trả bàn', testSharedSessionAndNames);
+  await section('16. Thanh toán và quầy thu ngân', testPaymentsAndCashier);
   await teardown().catch((e) => console.error('Dọn dẹp lỗi:', e.message));
 
   console.log(`\n================ KẾT QUẢ: ${passed} đạt, ${failures.length} lỗi ================`);

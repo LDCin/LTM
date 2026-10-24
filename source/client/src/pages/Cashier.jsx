@@ -1,0 +1,351 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
+import ConnectionBadge from '../components/ConnectionBadge.jsx';
+import Login from '../components/Login.jsx';
+import { ApiError, getStaffSession, request, setStaffSession, wsUrl } from '../lib/api.js';
+import { RealtimeConnection } from '../lib/connection.js';
+import { ITEM_STATUS, formatVnd, minutesSince } from '../lib/format.js';
+
+const STATE_LABEL = {
+  EMPTY: 'Trống',
+  DINING: 'Đang ăn',
+  AWAITING_PAYMENT: 'Chờ thanh toán',
+  PAID: 'Đã thanh toán',
+  OUT_OF_SERVICE: 'Ngừng phục vụ',
+};
+const METHOD_LABEL = { CASH: 'Tiền mặt', VNPAY: 'VNPay' };
+const REASONS = [
+  ['UNPAID_LEFT', 'Khách bỏ về không trả'],
+  ['COMPED', 'Mời khách (không thu tiền)'],
+  ['OTHER', 'Lý do khác'],
+];
+
+export default function Cashier() {
+  const [session, setSession] = useState(() => {
+    const s = getStaffSession();
+    return s && ['CASHIER', 'ADMIN'].includes(s.role) ? s : null;
+  });
+  const logout = useCallback(() => {
+    setStaffSession(null);
+    setSession(null);
+  }, []);
+  if (!session) {
+    return (
+      <Login
+        title="💵 Đăng nhập thu ngân"
+        allowedRoles={['CASHIER', 'ADMIN']}
+        onLogin={setSession}
+        hint="Tài khoản mẫu: thungan / thungan123"
+      />
+    );
+  }
+  return <CashierBoard session={session} onLogout={logout} />;
+}
+
+function CashierBoard({ session, onLogout }) {
+  const token = session.token;
+  const [tables, setTables] = useState([]);
+  const [selected, setSelected] = useState(null); // id bàn đang mở chi tiết
+  const [detail, setDetail] = useState(null);
+  const [conn, setConn] = useState({ status: 'connecting' });
+  const [toast, setToast] = useState(null);
+  const [now, setNow] = useState(Date.now());
+  const reloadTimer = useRef(null);
+
+  const api = useCallback(
+    async (method, path, body) => {
+      try {
+        return (await request(method, path, { token, body })).data;
+      } catch (e) {
+        if (e instanceof ApiError && e.status === 401) onLogout();
+        throw e;
+      }
+    },
+    [token, onLogout],
+  );
+
+  const loadTables = useCallback(async () => {
+    setTables(await api('GET', '/api/cashier/tables'));
+  }, [api]);
+
+  const loadDetail = useCallback(
+    async (id) => {
+      if (!id) return;
+      setDetail(await api('GET', `/api/cashier/tables/${id}`));
+    },
+    [api],
+  );
+
+  // Nhiều sự kiện tới dồn dập (VD bếp cập nhật nhiều món) -> gộp lại, tải lại một lần sau 300 ms
+  const scheduleReload = useCallback(() => {
+    clearTimeout(reloadTimer.current);
+    reloadTimer.current = setTimeout(() => {
+      loadTables().catch(() => {});
+      setSelected((id) => {
+        if (id) loadDetail(id).catch(() => {});
+        return id;
+      });
+    }, 300);
+  }, [loadTables, loadDetail]);
+
+  useEffect(() => {
+    loadTables().catch((e) => setToast(e.message));
+    const connection = new RealtimeConnection({
+      url: wsUrl(),
+      connectHeaders: { Authorization: `Bearer ${token}` },
+      onStatus: (status, info) => setConn({ status, info }),
+      onConnected: (client) => {
+        // /topic/cashier: TABLE_STATE_CHANGED, PAYMENT_UPDATED -> sơ đồ bàn tự cập nhật
+        client.subscribe('/topic/cashier', (msg) => {
+          if (msg.type === 'PAYMENT_UPDATED' && msg.payment?.status === 'PAID') {
+            setToast(`Bàn ${msg.payment.tableCode}: đã nhận ${formatVnd(msg.payment.amount)} (${METHOD_LABEL[msg.payment.method]})`);
+          }
+          scheduleReload();
+        });
+        scheduleReload(); // kết nối lại: đồng bộ toàn bộ
+      },
+    });
+    connection.start();
+    const clock = setInterval(() => setNow(Date.now()), 30_000);
+    return () => {
+      connection.stop();
+      clearInterval(clock);
+      clearTimeout(reloadTimer.current);
+    };
+  }, [token, loadTables, scheduleReload]);
+
+  useEffect(() => {
+    if (!toast) return undefined;
+    const t = setTimeout(() => setToast(null), 4000);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  function open(id) {
+    setSelected(id);
+    setDetail(null);
+    loadDetail(id).catch((e) => setToast(e.message));
+  }
+
+  async function act(fn, okText) {
+    try {
+      await fn();
+      if (okText) setToast(okText);
+      await loadTables();
+      if (selected) await loadDetail(selected);
+    } catch (e) {
+      setToast(e.message);
+      if (e.code === 'VERSION_CONFLICT') {
+        loadTables().catch(() => {});
+        if (selected) loadDetail(selected).catch(() => {});
+      }
+    }
+  }
+
+  async function checkout(t) {
+    try {
+      await api('POST', `/api/cashier/tables/${t.id}/checkout`, {});
+      setToast(`Đã trả bàn ${t.code}`);
+      setSelected(null);
+      await loadTables();
+    } catch (e) {
+      if (e.code === 'CONFIRM_REQUIRED') {
+        const choice = window.prompt(
+          `${e.message}\n\nNhập số lý do:\n${REASONS.map(([, label], i) => `${i + 1}. ${label}`).join('\n')}`,
+          '1',
+        );
+        const reason = REASONS[Number(choice) - 1];
+        if (!reason) return;
+        const note = reason[0] === 'OTHER' ? window.prompt('Ghi chú lý do:') || '' : '';
+        await act(() => api('POST', `/api/cashier/tables/${t.id}/checkout`, { reason: reason[0], note }), `Đã trả bàn ${t.code}`);
+        setSelected(null);
+      } else {
+        setToast(e.message);
+      }
+    }
+  }
+
+  const counts = tables.reduce((m, t) => ({ ...m, [t.state]: (m[t.state] || 0) + 1 }), {});
+
+  return (
+    <div className="cashier">
+      <header className="admin-header">
+        <h1>💵 Thu ngân</h1>
+        <div className="cashier-legend">
+          {Object.entries(STATE_LABEL).map(([k, label]) => (
+            <span key={k}>
+              {label}: <strong>{counts[k] || 0}</strong>
+            </span>
+          ))}
+        </div>
+        <ConnectionBadge status={conn.status} info={conn.info} />
+        <span className="hint">{session.username}</span>
+        <button className="btn small" onClick={onLogout}>
+          Đăng xuất
+        </button>
+      </header>
+
+      <div className="cashier-grid">
+        {tables.map((t) => (
+          <button key={t.id} className={`cashier-card state-${t.state}`} onClick={() => open(t.id)}>
+            <h3>Bàn {t.code}</h3>
+            <span className="state">{STATE_LABEL[t.state]}</span>
+            {t.sessionId && (
+              <>
+                <span className="money">{formatVnd(t.total)}</span>
+                <span className="hint">
+                  {t.orderCount} đơn · {minutesSince(t.sessionOpenedAt, now)} phút
+                  {t.activeItemCount > 0 && ` · ${t.activeItemCount} món chưa ra`}
+                </span>
+                {t.pending && (
+                  <span>
+                    {METHOD_LABEL[t.pending.method]}: <strong>{formatVnd(t.pending.amount)}</strong>
+                  </span>
+                )}
+                {t.needsRefund && <span className="refund">⚠ Cần hoàn tiền</span>}
+              </>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {selected && (
+        <div className="modal-backdrop center" onClick={() => setSelected(null)}>
+          <div className="modal panel" onClick={(e) => e.stopPropagation()}>
+            {!detail ? (
+              <p>Đang tải...</p>
+            ) : (
+              <TableDetail
+                detail={detail}
+                onClose={() => setSelected(null)}
+                onCreateCash={() =>
+                  act(() => api('POST', `/api/cashier/tables/${detail.table.id}/payments`), 'Đã tạo lần thu tiền mặt')
+                }
+                onConfirm={(p) =>
+                  act(() => api('PATCH', `/api/cashier/payments/${p.id}/confirm`, { version: p.version }), 'Đã xác nhận nhận tiền')
+                }
+                onCancelPayment={(p) => act(() => api('POST', `/api/cashier/payments/${p.id}/cancel`), 'Đã huỷ lần thanh toán')}
+                onCheckout={() => checkout(detail.table)}
+              />
+            )}
+          </div>
+        </div>
+      )}
+
+      {toast && <div className="toast">{toast}</div>}
+    </div>
+  );
+}
+
+function TableDetail({ detail, onClose, onCreateCash, onConfirm, onCancelPayment, onCheckout }) {
+  const { table, bill, orders } = detail;
+  const pending = bill.pending;
+  return (
+    <>
+      <div className="panel-head">
+        <h2>
+          Bàn {table.code} · {STATE_LABEL[table.state]}
+        </h2>
+        <button className="btn small" onClick={onClose}>
+          Đóng
+        </button>
+      </div>
+
+      {!table.sessionId ? (
+        <p className="hint">Bàn đang trống. Phiên mới tự mở khi khách quét QR.</p>
+      ) : (
+        <>
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Đơn</th>
+                <th>Người đặt</th>
+                <th>Món</th>
+                <th>Tiền</th>
+              </tr>
+            </thead>
+            <tbody>
+              {orders.map((o) => (
+                <tr key={o.id}>
+                  <td>#{o.id}</td>
+                  <td>{o.guestName || '—'}</td>
+                  <td>
+                    {o.items.map((i) => (
+                      <div key={i.id}>
+                        {i.quantity}× {i.name}{' '}
+                        <span className={`chip chip-${ITEM_STATUS[i.status]?.tone}`}>{ITEM_STATUS[i.status]?.short}</span>
+                      </div>
+                    ))}
+                  </td>
+                  <td>{formatVnd(o.total)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          <div className="bill-summary">
+            <div className="order-line">
+              <span>Tổng (không tính món huỷ)</span>
+              <strong>{formatVnd(bill.total)}</strong>
+            </div>
+            <div className="order-line">
+              <span>Đã thanh toán</span>
+              <span>{formatVnd(bill.paid)}</span>
+            </div>
+            <div className="order-line total-line">
+              <span>{bill.remaining < 0 ? 'Trả thừa' : 'Còn phải trả'}</span>
+              <strong>{formatVnd(Math.abs(bill.remaining))}</strong>
+            </div>
+          </div>
+
+          {pending ? (
+            <div className="banner warn pay-banner">
+              <div>
+                Đang chờ: <strong>{METHOD_LABEL[pending.method]}</strong> · {formatVnd(pending.amount)} · hết hạn lúc{' '}
+                {new Date(pending.expiresAt).toLocaleTimeString('vi-VN')}
+                {pending.method === 'VNPAY' && <div className="hint">VNPay được xác nhận tự động khi cổng báo về.</div>}
+              </div>
+              <div className="pay-actions">
+                {pending.method === 'CASH' && (
+                  <button className="btn small ok" onClick={() => onConfirm(pending)}>
+                    Đã nhận tiền
+                  </button>
+                )}
+                <button className="btn small" onClick={() => onCancelPayment(pending)}>
+                  Huỷ
+                </button>
+              </div>
+            </div>
+          ) : (
+            bill.remaining > 0 && (
+              <button className="btn primary" onClick={onCreateCash}>
+                Thu tiền mặt {formatVnd(bill.remaining)}
+              </button>
+            )
+          )}
+
+          {bill.payments.length > 0 && (
+            <div>
+              <h3>Các lần thanh toán</h3>
+              {bill.payments.map((p) => (
+                <div key={p.id} className="order-line">
+                  <span>
+                    #{p.id} · {METHOD_LABEL[p.method]} · {formatVnd(p.amount)}
+                  </span>
+                  <span>
+                    {p.status}
+                    {p.needsRefund && <span className="chip chip-danger">Cần hoàn tiền</span>}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="modal-actions">
+            <button className="btn primary" disabled={!!pending} onClick={onCheckout}>
+              Trả bàn
+            </button>
+          </div>
+        </>
+      )}
+    </>
+  );
+}

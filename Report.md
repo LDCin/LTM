@@ -1,6 +1,6 @@
 # Kịch bản trình bày bảo vệ – QR Order
 
-**Thời lượng gợi ý:** khoảng 12 phút nói + 5 phút demo, rồi tới phần thầy hỏi.
+**Thời lượng gợi ý:** khoảng 13 phút nói + 6 phút demo, rồi tới phần thầy hỏi.
 Nếu thầy cho ít thời gian hơn, nói các phần có dấu ⭐ trước.
 
 Bố cục bám theo 4 câu hỏi mà `Instruction.md` (mục 19) nói giảng viên quan tâm nhất:
@@ -18,13 +18,19 @@ phải nhớ** nếu bị quên lời.
 ## Chuẩn bị trước khi vào phòng
 
 - [ ] Server chạy bằng MySQL, `AUTH_SECRET` đã đặt.
-- [ ] Mở sẵn 3 cửa sổ: Quản trị, Bếp (cửa sổ ẩn danh), Khách (hoặc điện thoại thật đã quét QR).
+- [ ] Mở sẵn 4 cửa sổ: Quản trị, Bếp (cửa sổ ẩn danh), Thu ngân `/cashier` (cửa sổ ẩn danh / trình duyệt khác,
+      `thungan` / `thungan123`), Khách (hoặc điện thoại thật đã quét QR). Nên có **hai** điện thoại (hoặc hai cửa sổ)
+      cho cùng một bàn để demo đơn chung.
+- [ ] Nếu demo VNPay: server có biến môi trường `VNPAY_TMN_CODE`, `VNPAY_HASH_SECRET` (mã sandbox, **không** ghi vào
+      file nào), chạy ngrok tên miền cố định, IPN URL đã khai báo với VNPay; chuẩn bị sẵn thẻ test NCB của sandbox.
 - [ ] Tunnel đang chạy nếu demo bằng điện thoại 4G; đã in hoặc hiện sẵn mã QR của 1–2 bàn.
 - [ ] Màn hình bếp đang ở chế độ **RELIABLE_PUSH**.
 - [ ] Trên trình duyệt bếp, mở sẵn F12 → Network → WS để cho thầy xem frame khi được hỏi.
 - [ ] Mở sẵn các file: `ws/WebSocketConfig.java`, `ws/KitchenWsController.java`, `order/OrderService.java`,
-      `client/src/lib/stomp.js`, `client/src/lib/kitchenFeed.js`.
-- [ ] Dọn dữ liệu cũ để màn hình bếp sạch (Quản trị → đóng/mở lại bàn, hoặc phục vụ hết đơn cũ).
+      `payment/PaymentService.java`, `payment/VnpayGateway.java`, `client/src/lib/stomp.js`,
+      `client/src/lib/kitchenFeed.js`.
+- [ ] Dọn dữ liệu cũ để màn hình bếp sạch (bếp phục vụ hết đơn cũ; thu ngân **Trả bàn** các bàn còn khách, để bàn
+      demo ở trạng thái "Trống").
 
 ---
 
@@ -45,7 +51,8 @@ phải nhớ** nếu bị quên lời.
 **Nói:**
 > Em xin trình bày đề tài **QR Order – hệ thống gọi món bằng mã QR với màn hình bếp thời gian thực**. Khách quét mã QR
 > trên bàn để gọi món bằng điện thoại, đơn được gửi về server và hiện ngay trên màn hình của bếp; bếp cập nhật trạng
-> thái món thì điện thoại của khách cũng thấy ngay.
+> thái món thì điện thoại của khách cũng thấy ngay. Cuối bữa, khách thanh toán cả bàn bằng tiền mặt hoặc qua cổng
+> VNPay, thu ngân thấy ngay trên màn hình của quầy.
 >
 > Trọng tâm của nhóm em không nằm ở giao diện, mà ở **phần mạng**: làm sao để đơn tới bếp **không bị mất, không bị
 > trùng** kể cả khi mạng chập chờn.
@@ -97,19 +104,20 @@ phải nhớ** nếu bị quên lời.
 **Chiếu (sơ đồ kiến trúc):**
 
 ```text
- ┌───────────────┐   ┌───────────────┐   ┌───────────────┐
- │ Khách         │   │ Bếp           │   │ Quản trị      │
- │ điện thoại    │   │ máy tính bảng │   │ laptop        │
- └──┬─────────▲──┘   └──┬────────▲───┘   └──┬────────────┘
-    │ REST    │ WS      │ REST   │ WS        │ REST
-    │ (lệnh)  │ (sự kiện)        │           │
- ═══╪═════════╪═════════╪════════╪═══════════╪═══════  Mạng (Wi-Fi / 4G qua tunnel)
-    ▼         │         ▼        │           ▼
- ┌──────────────────────────────────────────────────────┐
- │ Spring Boot server – cổng 8080                        │
- │  ├─ Tầng REST: nhận lệnh, trả kết quả                 │
- │  ├─ Tầng WebSocket/STOMP: giữ kết nối, đẩy sự kiện    │
- │  ├─ Tầng nghiệp vụ: đặt món, đổi trạng thái, huỷ      │
+ ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐
+ │ Khách       │  │ Bếp         │  │ Thu ngân    │  │ Quản trị    │
+ │ điện thoại  │  │ máy t.bảng  │  │ máy quầy    │  │ laptop      │
+ └─┬───────▲───┘  └─┬───────▲───┘  └─┬───────▲───┘  └─┬───────────┘
+   │ REST  │ WS     │ REST  │ WS     │ REST  │ WS     │ REST
+   │(lệnh) │(sự kiện)       │        │       │        │
+ ══╪═══════╪════════╪═══════╪════════╪═══════╪════════╪════  Mạng (Wi-Fi / 4G qua tunnel)
+   ▼       │        ▼       │        ▼       │        ▼
+ ┌──────────────────────────────────────────────────────┐      ┌───────────────┐
+ │ Spring Boot server – cổng 8080                        │◀─IPN─│ VNPay sandbox │
+ │  ├─ Tầng REST: nhận lệnh, trả kết quả                 │      │ (cổng thanh   │
+ │  ├─ Tầng WebSocket/STOMP: giữ kết nối, đẩy sự kiện    │─────▶│  toán)        │
+ │  ├─ Tầng nghiệp vụ: đặt món, đổi trạng thái, huỷ,     │ tra  └───────────────┘
+ │  │   phiên bàn, thanh toán                            │ cứu
  │  └─ Nhật ký sự kiện + gửi sau khi commit              │
  └──────────────────────────┬───────────────────────────┘
                             │ JDBC (cổng 3306)
@@ -123,8 +131,9 @@ phải nhớ** nếu bị quên lời.
 ```
 
 **Nói:**
-> Hệ thống theo mô hình **client – server**. Có ba loại client đều là trang web: trang của khách trên điện thoại, màn
-> hình bếp, và trang quản trị. Server viết bằng **Java Spring Boot**, dữ liệu lưu trong **MySQL**.
+> Hệ thống theo mô hình **client – server**. Có bốn loại client đều là trang web: trang của khách trên điện thoại, màn
+> hình bếp, trang thu ngân và trang quản trị. Server viết bằng **Java Spring Boot**, dữ liệu lưu trong **MySQL**. Bên
+> ngoài còn có **cổng thanh toán VNPay** (môi trường thử), là một server khác gọi về server của nhóm.
 >
 > Client và server nói chuyện qua **hai kênh**, cùng chạy trên cổng 8080:
 >
@@ -135,7 +144,8 @@ phải nhớ** nếu bị quên lời.
 >
 > Khách và bếp không bao giờ nói chuyện trực tiếp với nhau; mọi thứ đều qua server.
 
-**Ý chính:** client–server; REST cho lệnh, WebSocket/STOMP cho sự kiện; chung cổng 8080.
+**Ý chính:** client–server (khách, bếp, thu ngân, quản trị); REST cho lệnh, WebSocket/STOMP cho sự kiện; chung cổng
+8080; VNPay là server bên ngoài.
 
 ---
 
@@ -147,7 +157,7 @@ phải nhớ** nếu bị quên lời.
 ┌──────────────────────────────────────────────┐
 │ Giao thức của nhóm: {type, seq, eventId, ...}│  ← số thứ tự, ACK, RESUME
 ├──────────────────────────────────────────────┤
-│ STOMP 1.2: CONNECT, SUBSCRIBE, SEND, MESSAGE │  ← kênh /topic/kitchen, /topic/table.5
+│ STOMP 1.2: CONNECT, SUBSCRIBE, SEND, MESSAGE │  ← kênh /topic/kitchen, /topic/table.5, /topic/cashier
 ├──────────────────────────────────────────────┤
 │ WebSocket: kênh hai chiều, giữ mở liên tục   │
 ├──────────────────────────────────────────────┤
@@ -177,8 +187,9 @@ Client                                              Server
 > - Dưới cùng là **WebSocket**. Client gửi một HTTP request tới `/ws` có header `Upgrade: websocket`, server trả mã
 >   **101 Switching Protocols**, từ đó kết nối TCP này chuyển thành kênh hai chiều.
 > - Lớp giữa là **STOMP**, một giao thức dạng văn bản. Nó cho phép đăng ký nghe theo **kênh**: bếp nghe kênh
->   `/topic/kitchen`, điện thoại bàn 5 nghe kênh `/topic/table.5`. Khách chỉ được nghe kênh của bàn mình, server kiểm
->   tra quyền ở từng lệnh đăng ký.
+>   `/topic/kitchen`, **mọi điện thoại** của bàn 5 nghe chung kênh `/topic/table.5` nên cả bàn thấy đơn chung, thu ngân
+>   nghe `/topic/cashier`. Khách chỉ được nghe kênh của bàn mình, chỉ thu ngân và quản trị được nghe kênh thu ngân;
+>   server kiểm tra quyền ở từng lệnh đăng ký.
 > - Lớp trên cùng là **giao thức của nhóm**: mỗi sự kiện có một **số thứ tự `seq`** tăng dần, cùng loại sự kiện, mã sự
 >   kiện, thời gian và dữ liệu.
 >
@@ -270,7 +281,59 @@ Bếp B: "Từ chối", version=0 ──▶ version đã là 1 ≠ 0         →
 
 ---
 
-## 6. Xử lý nhiều client đồng thời (1 phút)
+## 6. ⭐ Phiên bàn và thanh toán (1 phút 30 giây)
+
+**Chiếu (a – phiên bàn và đơn chung):**
+
+```text
+ Điện thoại A ─┐ POST /join          bàn trống → mở phiên mới:
+ Điện thoại B ─┘ (cùng lúc)          UPDATE restaurant_table SET current_session_id = :mới
+                                     WHERE id = :bàn AND current_session_id IS NULL
+                                     → chỉ 1 máy thành công, máy kia vào phiên đó
+
+ Cùng phiên → cùng nghe /topic/table.5 → ĐƠN CHUNG (ghi tên người đặt, "BẠN ĐẶT" cho đơn của mình)
+ Thu ngân bấm "Trả bàn" → TABLE_SESSION_ENDED → mọi máy hiện "Cảm ơn quý khách"
+```
+
+**Chiếu (b – thanh toán, xác nhận server-to-server):**
+
+```text
+Khách                     Server nhóm                                 VNPay sandbox
+  │ POST /api/payments ──▶│ server tự tính tiền; mỗi phiên 1 lần chờ   │
+  │                       │ (UNIQUE pending_session_id)                │
+  │ TIỀN MẶT ............ │◀── thu ngân "Đã nhận tiền" (khoá version)  │
+  │ VNPAY: ◀── link có chữ ký HMAC-SHA512                              │
+  │── trang VNPay, nhập thẻ test ─────────────────────────────────────▶│
+  │                       │◀── IPN (có chữ ký): kiểm chữ ký, số tiền ──│
+  │                       │──── 00 ghi nhận | 02 đã xử lý | 97 sai chữ ký ─▶│
+  │◀── Return URL (có chữ ký) → về trang gọi món                       │
+  │                       │── quá hạn chưa có tin: tra cứu querydr ───▶│
+  │◀═ PAYMENT_UPDATED ════│═══▶ /topic/cashier: bàn "Đã thanh toán"
+```
+
+**Nói:**
+> Nhóm em bổ sung nghiệp vụ trọn một lượt khách. Khách quét QR là điện thoại gọi `POST /join` để **vào bàn**; bàn trống
+> thì server tự mở **phiên bàn**, nhân viên không phải bấm gì. Hai máy quét cùng lúc vẫn chỉ một phiên, vì câu `UPDATE`
+> chỉ chạy được khi bàn **chưa có** phiên. Mọi điện thoại trong phiên nghe chung kênh của bàn nên thấy **đơn chung**,
+> mỗi đơn ghi tên người đặt; mã thiết bị chỉ dùng để biết ai được huỷ đơn nào, không gửi cho máy khác.
+>
+> Thanh toán theo cả bàn, số tiền **do server tính**. Mỗi phiên chỉ có **một** lần thanh toán đang chờ, nhờ ràng buộc
+> `UNIQUE` trong database, nên hai người cùng bấm cũng chỉ tạo một lần. Tiền mặt thì thu ngân bấm "Đã nhận tiền", có
+> khoá lạc quan như ở bếp.
+>
+> Với VNPay, điểm quan trọng là **không tin trình duyệt**. Server VNPay gọi thẳng server của nhóm, gọi là **IPN**, kèm
+> **chữ ký HMAC-SHA512** tính bằng khoá bí mật. Server tính lại chữ ký và so số tiền; sai thì từ chối. Việc ghi nhận là
+> một câu `UPDATE` có điều kiện trạng thái, nên VNPay gọi lặp thì lần sau chỉ nhận mã `02`, **không cộng tiền hai lần**.
+> Nếu IPN bị lạc, còn hai đường dự phòng: Return URL cũng có chữ ký, và server tự **tra cứu** giao dịch với VNPay
+> trước khi cho lần thanh toán hết hạn sau 15 phút.
+
+**Ý chính:** phiên bàn tự mở (UPDATE có điều kiện) → đơn chung; thanh toán: server tính tiền, 1 lần chờ (UNIQUE), IPN
+server-to-server có chữ ký, idempotent (`02`), dự phòng Return URL + querydr. Phần này **chưa có số liệu đo**, chỉ có
+test chức năng.
+
+---
+
+## 7. Xử lý nhiều client đồng thời (1 phút)
 
 **Nói:**
 > Về đồng thời: server dùng Tomcat với NIO, nên hàng nghìn kết nối WebSocket đang rảnh không chiếm thread nào. Request
@@ -279,21 +342,22 @@ Bếp B: "Từ chối", version=0 ──▶ version đã là 1 ≠ 0         →
 >
 > Dữ liệu dùng chung trong bộ nhớ, như danh sách kết nối và số kết nối mỗi bàn, dùng `ConcurrentHashMap` và
 > `AtomicInteger`. Dữ liệu dùng chung trong database thì dùng khoá lạc quan, câu `UPDATE` có điều kiện và ràng buộc
-> khoá chính như em vừa trình bày.
+> khoá chính / `UNIQUE` như em vừa trình bày: cho món ăn, cho phiên bàn và cho lần thanh toán.
 
 ---
 
-## 7. Xử lý lỗi (30 giây)
+## 8. Xử lý lỗi (30 giây)
 
 **Nói:**
 > Mọi lỗi đều trả về một định dạng JSON thống nhất gồm mã lỗi, thông báo và chi tiết. Request sai trả 400, mã QR sai
-> 401, xung đột 409, món hết 422, gửi quá nhanh 429, database lỗi thì rollback và trả 503. Frame STOMP sai chỉ làm phiên
+> 401, xung đột 409 (kể cả đặt món khi bàn đang thanh toán, hay điện thoại của lượt khách cũ), món hết 422, gửi quá
+> nhanh 429, database lỗi thì rollback và trả 503. Dữ liệu VNPay sai chữ ký thì bị từ chối, không ghi nhận tiền. Frame STOMP sai chỉ làm phiên
 > đó nhận báo lỗi, server không bị dừng. Bộ test tự động của nhóm có ca kiểm tra server vẫn sống sau một loạt request
 > lỗi.
 
 ---
 
-## 8. ⭐ Demo (5 phút)
+## 9. ⭐ Demo (6 phút)
 
 Làm theo thứ tự, vừa làm vừa nói ngắn.
 
@@ -306,14 +370,18 @@ Làm theo thứ tự, vừa làm vừa nói ngắn.
 | 5 | Chờ bếp kết nối lại, chỉ đơn vừa đặt và ô **Gửi bù** | "Bếp kết nối lại, gửi RESUME, server gửi bù đơn bị lỡ, không mất đơn" |
 | 6 | Điện thoại bật chế độ máy bay, bấm **Đặt món**; tắt chế độ máy bay, bấm **Gửi lại** | "Khách mất mạng khi đặt, gửi lại vẫn chỉ có một đơn nhờ Idempotency-Key" |
 | 7 | Hai tab bếp cùng bấm **Nhận** một món | "Một bên thành công, bên kia nhận 409, không ghi đè" |
-| 8 | (Nếu còn thời gian) F12 → WS → Messages | "Đây là các frame STOMP thật, có `seq`, có ACK" |
+| 8 | Điện thoại thứ hai quét QR cùng bàn, nhập tên khác, đặt một món | "Hai máy cùng một phiên bàn: máy kia thấy ngay đơn mới, có tên người đặt, chỉ máy đặt mới huỷ được" |
+| 9 | ⭐ Khách bấm **Thanh toán** → **Tiền mặt tại quầy**; chỉ màn hình Thu ngân | "Cả hai điện thoại hiện đang thanh toán, nút gọi món bị khoá; thu ngân thấy bàn chuyển cam 'Chờ thanh toán' qua `/topic/cashier`" |
+| 10 | Thu ngân bấm vào bàn → **Đã nhận tiền** → **Trả bàn** | "Điện thoại hiện đã thanh toán đủ; trả bàn thì mọi máy hiện 'Cảm ơn quý khách', bàn về Trống" |
+| 11 | (Nếu đã cấu hình VNPay qua ngrok) bàn khác: **Thanh toán → VNPay**, trả bằng thẻ test NCB | "VNPay gọi IPN về server có chữ ký; server kiểm rồi mới ghi đã trả, thu ngân thấy 'Đã thanh toán'" |
+| 12 | (Nếu còn thời gian) F12 → WS → Messages | "Đây là các frame STOMP thật, có `seq`, có ACK" |
 
 Nếu demo bị lỗi mạng thật trong phòng: bình tĩnh nói "đây chính là tình huống hệ thống được thiết kế để chịu", chờ kết
 nối lại hoặc chuyển sang cửa sổ chạy trên máy (`localhost`).
 
 ---
 
-## 9. ⭐ Kết quả thực nghiệm (1 phút 30 giây)
+## 10. ⭐ Kết quả thực nghiệm (1 phút 30 giây)
 
 **Chiếu:** bảng kết quả bên dưới.
 
@@ -335,28 +403,34 @@ nối lại hoặc chuyển sang cửa sổ chạy trên máy (`localhost`).
 **Nói thêm (thành thật, thầy đánh giá cao):**
 > Có hai điểm nhóm em ghi nhận là chưa tốt: trong kịch bản đo, đẩy qua WebSocket tốn nhiều byte hơn hỏi định kỳ một
 > chút; và rate limit giúp bảo vệ database và CPU rõ ràng, nhưng độ trễ của khách bình thường thay đổi không đáng kể.
+>
+> Các số này đo **trước** khi nhóm thêm phiên bàn và thanh toán (khi đó giới hạn là 5 đơn/phút mỗi bàn, nay là 10).
+> Phần thanh toán chưa có số đo, chỉ có test tự động: sai chữ ký trả `97`, sai số tiền `04`, gọi lặp `02`.
 
 ---
 
-## 10. Điểm mới và đóng góp (30 giây)
+## 11. Điểm mới và đóng góp (30 giây)
 
 **Nói:**
 > Tóm lại, điểm mới của nhóm không phải một thuật toán mới, mà là **thiết kế và tích hợp một giao thức giao đơn tin
 > cậy** trên WebSocket/STOMP, gồm số thứ tự, ACK, gửi bù từ nhật ký sự kiện và chỉ gửi sau commit; cùng với đặt món
-> idempotent, khoá lạc quan và chống quá tải; và **có số liệu đo** so với cách làm thông thường.
+> idempotent, khoá lạc quan và chống quá tải; và **có số liệu đo** so với cách làm thông thường. Thêm vào đó là
+> **xác nhận thanh toán server-to-server có chữ ký và idempotent**, cùng phiên bàn và thanh toán an toàn khi nhiều
+> điện thoại thao tác cùng lúc.
 
 ---
 
-## 11. Hạn chế và hướng phát triển (30 giây)
+## 12. Hạn chế và hướng phát triển (30 giây)
 
 **Nói:**
 > Hệ thống còn một số hạn chế: mới chạy trên một server; số liệu chủ yếu đo trên một máy; nhật ký sự kiện chưa có cơ
-> chế dọn dẹp; chưa dùng HTTPS khi chạy trong mạng nội bộ. Hướng phát triển là chạy nhiều server với broker riêng, đo
+> chế dọn dẹp; chưa dùng HTTPS khi chạy trong mạng nội bộ; thanh toán mới chạy trên môi trường thử của VNPay, chưa có
+> số đo, hoàn tiền vẫn làm tay. Hướng phát triển là chạy nhiều server với broker riêng, đo
 > trong mạng thật, và thêm bảo mật.
 
 ---
 
-## 12. Kết thúc (15 giây)
+## 13. Kết thúc (15 giây)
 
 **Nói:**
 > Phần trình bày của nhóm em đến đây là hết. Em cảm ơn thầy đã lắng nghe, mời thầy đặt câu hỏi.
@@ -377,6 +451,12 @@ nối lại hoặc chuyển sang cửa sổ chạy trên máy (`localhost`).
 | Hai request cùng Idempotency-Key tới cùng lúc? | Cả hai cùng chèn khoá vào DB, khoá chính chỉ cho một cái thắng; cái kia đọc lại đơn của cái thắng |
 | Sao gửi sự kiện sau commit? | Nếu gửi trước mà giao dịch rollback (món hết, lỗi DB) thì bếp thấy đơn không tồn tại |
 | Xử lý nhiều client thế nào? | Tomcat NIO + thread pool; dữ liệu trong RAM dùng ConcurrentHashMap/AtomicInteger; dữ liệu trong DB dùng khoá lạc quan và UPDATE có điều kiện |
+| Hai điện thoại quét QR bàn trống cùng lúc thì sao? | Cả hai gọi `POST /join`; câu `UPDATE ... WHERE current_session_id IS NULL` chỉ cho một máy mở phiên, máy kia vào phiên đó |
+| Sao khách thấy đơn của người khác cùng bàn? | Cùng phiên bàn nghe chung `/topic/table.{id}`; mã thiết bị chỉ để xác định quyền huỷ, không gửi cho máy khác |
+| Sao không tin kết quả VNPay trên trình duyệt? | Trình duyệt có thể bị sửa hoặc bị đóng giữa chừng; kết quả chỉ ghi nhận khi chữ ký HMAC-SHA512 khớp và số tiền khớp số server tính; kênh chính là IPN server-to-server |
+| VNPay gửi IPN hai lần thì sao? | Ghi nhận bằng `UPDATE` có điều kiện trạng thái; lần sau thấy đã `PAID` nên trả `02`, không cộng tiền hai lần |
+| IPN không tới thì sao? | Return URL cũng có chữ ký nên vẫn ghi nhận được; ngoài ra server tra cứu `querydr` trước khi cho lần thanh toán hết hạn (15 phút) |
+| Hai người cùng bấm Thanh toán? | Cột `pending_session_id` có ràng buộc `UNIQUE`: database chỉ cho một lần đang chờ, người sau nhận lại lần đó |
 | Optimistic locking là gì? | Không khoá trước; lúc ghi kiểm tra version còn như lúc đọc không, khác thì báo xung đột 409 |
 | Token bucket hoạt động thế nào? | Mỗi IP/bàn có một "thùng" token, mỗi request lấy 1 token, token được nạp lại đều theo thời gian; hết token thì trả 429 |
 | Số liệu đo thế nào? | Công cụ Node.js tự viết đóng cả vai khách và bếp trong cùng một tiến trình, đo bằng cùng một đồng hồ; baseline và đề xuất chạy cùng mã nguồn, chỉ đổi cấu hình |
@@ -388,3 +468,5 @@ Thầy có thể yêu cầu **giải thích một đoạn code**. Nên tập tr�
 2. `OrderService.placeOrder()` – xử lý Idempotency-Key.
 3. `OrderRepository.updateItemStatus()` – câu `UPDATE ... WHERE version = ?`.
 4. `kitchenFeed.js` hàm `_accept()` và `_onReplay()` – chống trùng, phát hiện thiếu, nhận gửi bù.
+5. `TableService.join()` – mở phiên bàn bằng `UPDATE ... WHERE current_session_id IS NULL`.
+6. `PaymentService.handleVnpayCallback()` và `VnpayGateway.verify()` – kiểm chữ ký, số tiền, trả mã `00/02/04/97`.

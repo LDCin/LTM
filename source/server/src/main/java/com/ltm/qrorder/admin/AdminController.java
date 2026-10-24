@@ -11,6 +11,8 @@ import com.ltm.qrorder.menu.MenuDtos.MenuItemDto;
 import com.ltm.qrorder.menu.MenuDtos.MenuItemRequest;
 import com.ltm.qrorder.menu.MenuService;
 import com.ltm.qrorder.order.OrderRepository;
+import com.ltm.qrorder.payment.PaymentDtos.PaymentDto;
+import com.ltm.qrorder.payment.PaymentRepository;
 import com.ltm.qrorder.ratelimit.RateLimiter;
 import com.ltm.qrorder.table.TableInfo;
 import com.ltm.qrorder.table.TableService;
@@ -54,10 +56,12 @@ public class AdminController {
     private final RateLimiter rateLimiter;
     private final AppProperties props;
     private final Metrics metrics;
+    private final PaymentRepository payments;
 
     public AdminController(TableService tables, MenuService menu, OrderRepository orders, EventStore events,
                            EventPublisher publisher, SessionRegistry registry, RateLimiter rateLimiter,
-                           AppProperties props, Metrics metrics) {
+                           AppProperties props, Metrics metrics, PaymentRepository payments) {
+        this.payments = payments;
         this.tables = tables;
         this.menu = menu;
         this.orders = orders;
@@ -74,6 +78,7 @@ public class AdminController {
     public record CreateTableRequest(@NotBlank @Size(max = 20) @Pattern(regexp = "[A-Za-z0-9_-]+") String code) {
     }
 
+    /** open = true: mở sẵn phiên cho các bàn (dùng cho bộ thực nghiệm, đặt món ngay không cần /join). */
     public record BulkTablesRequest(@NotBlank @Size(max = 10) @Pattern(regexp = "[A-Za-z0-9_-]+") String prefix,
                                     @NotNull @Min(1) @Max(1000) Integer count,
                                     boolean open) {
@@ -95,11 +100,13 @@ public class AdminController {
         return tables.bulkCreate(req.prefix(), req.count(), req.open());
     }
 
+    /** Cho bàn phục vụ trở lại (không mở phiên; phiên mở khi khách quét QR). */
     @PostMapping("/tables/{id}/open")
     public TableInfo openTable(@PathVariable long id) {
         return tables.open(id);
     }
 
+    /** Ngừng phục vụ bàn (bảo trì). 409 TABLE_HAS_GUESTS nếu bàn đang có khách. */
     @PostMapping("/tables/{id}/close")
     public TableInfo closeTable(@PathVariable long id) {
         return tables.close(id);
@@ -108,6 +115,13 @@ public class AdminController {
     @PostMapping("/tables/{id}/rotate-token")
     public TableInfo rotateToken(@PathVariable long id) {
         return tables.rotateToken(id);
+    }
+
+    // ------------------------------------------------------------------ thanh toán (chỉ xem)
+
+    @GetMapping("/payments")
+    public List<PaymentDto> payments(@RequestParam(defaultValue = "100") int limit) {
+        return payments.listRecent(limit).stream().map(PaymentRepository.PaymentRow::dto).toList();
     }
 
     // ------------------------------------------------------------------ thực đơn

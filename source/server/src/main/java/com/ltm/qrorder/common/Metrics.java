@@ -17,6 +17,9 @@ public class Metrics {
     public final AtomicLong wsConnectRejected = new AtomicLong();
     public final AtomicLong eventsPublished = new AtomicLong();
     public final AtomicLong replayRequests = new AtomicLong();
+    public final AtomicLong paymentsCreated = new AtomicLong();
+    public final AtomicLong paymentsPaid = new AtomicLong();
+    public final AtomicLong sessionsAutoEnded = new AtomicLong();
 
     public Map<String, Long> snapshot() {
         Map<String, Long> m = new LinkedHashMap<>();
@@ -27,6 +30,9 @@ public class Metrics {
         m.put("wsConnectRejected", wsConnectRejected.get());
         m.put("eventsPublished", eventsPublished.get());
         m.put("replayRequests", replayRequests.get());
+        m.put("paymentsCreated", paymentsCreated.get());
+        m.put("paymentsPaid", paymentsPaid.get());
+        m.put("sessionsAutoEnded", sessionsAutoEnded.get());
         return m;
     }
 }

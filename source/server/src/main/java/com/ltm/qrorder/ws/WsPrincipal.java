@@ -5,9 +5,9 @@ import java.security.Principal;
 /**
  * Danh tính của một kết nối WebSocket, gán lúc STOMP CONNECT.
  * name là duy nhất theo session để server gửi riêng cho đúng kết nối (/user/queue/...).
- * deviceId (chỉ với khách) quyết định topic riêng /topic/guest.{deviceId} mà kết nối được phép nghe.
+ * staffRole (chỉ với nhân viên): ADMIN / KITCHEN / CASHIER, quyết định được nghe /topic/cashier hay không.
  */
-public record WsPrincipal(String name, String sessionId, ClientRole role, Long tableId, String label, String deviceId)
+public record WsPrincipal(String name, String sessionId, ClientRole role, Long tableId, String label, String staffRole)
         implements Principal {
 
     public enum ClientRole { STAFF, CUSTOMER }
@@ -15,5 +15,9 @@ public record WsPrincipal(String name, String sessionId, ClientRole role, Long t
     @Override
     public String getName() {
         return name;
+    }
+
+    public boolean canUseCashier() {
+        return "ADMIN".equals(staffRole) || "CASHIER".equals(staffRole);
     }
 }

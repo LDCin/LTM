@@ -33,6 +33,19 @@ public class SchemaMigrator implements CommandLineRunner {
             jdbc.execute("ALTER TABLE orders ADD COLUMN device_id VARCHAR(64) NULL");
             jdbc.execute("CREATE INDEX idx_orders_session_device ON orders (session_id, device_id)");
         }
+        if (!columnExists("orders", "guest_name")) {
+            log.info("Nâng cấp schema: thêm cột orders.guest_name");
+            jdbc.execute("ALTER TABLE orders ADD COLUMN guest_name VARCHAR(30) NULL");
+        }
+        if (!columnExists("table_session", "end_reason")) {
+            log.info("Nâng cấp schema: phiên bàn tự động (end_reason, end_note, ended_by)");
+            jdbc.execute("ALTER TABLE table_session ADD COLUMN end_reason VARCHAR(30) NULL");
+            jdbc.execute("ALTER TABLE table_session ADD COLUMN end_note VARCHAR(200) NULL");
+            jdbc.execute("ALTER TABLE table_session ADD COLUMN ended_by VARCHAR(50) NULL");
+            // Trước đây CLOSED nghĩa là "chưa có phiên"; nay CLOSED nghĩa là "ngừng phục vụ".
+            // Mọi bàn cũ đều đang phục vụ, phiên vẫn giữ nguyên trong current_session_id.
+            jdbc.update("UPDATE restaurant_table SET status = 'OPEN'");
+        }
     }
 
     private boolean columnExists(String table, String column) {

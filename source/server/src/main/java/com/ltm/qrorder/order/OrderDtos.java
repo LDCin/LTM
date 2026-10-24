@@ -19,7 +19,13 @@ public final class OrderDtos {
 
     public record PlaceOrderRequest(@NotEmpty(message = "Đơn phải có ít nhất 1 món")
                                     @Size(max = 30, message = "Tối đa 30 dòng món mỗi đơn")
-                                    List<@Valid @NotNull OrderLine> items) {
+                                    List<@Valid @NotNull OrderLine> items,
+                                    /** Tên khách tự nhập (hiện cho cả bàn và bếp); null = khách bỏ qua. */
+                                    @Size(max = 60, message = "Tên quá dài") String guestName) {
+
+        public PlaceOrderRequest(List<OrderLine> items) {
+            this(items, null);
+        }
     }
 
     public record OrderLine(@NotNull Long menuItemId,
@@ -36,8 +42,13 @@ public final class OrderDtos {
                                String note, String status, int version, String station, long updatedAt) {
     }
 
+    /**
+     * guestName: tên người đặt (có thể null). firstInSession: đơn đầu tiên của lượt khách
+     * (bếp hiện nhãn "Bàn mới mở" để nhân viên liếc xem bàn có người thật không).
+     * Không chứa mã thiết bị: mã này là bí mật dùng để xác định quyền huỷ đơn.
+     */
     public record OrderDto(long id, long tableId, String tableCode, long sessionId, String status, long total,
-                           long createdAt, List<OrderItemDto> items) {
+                           long createdAt, String guestName, boolean firstInSession, List<OrderItemDto> items) {
     }
 
     public record PlaceOrderResult(OrderDto order, boolean replayed) {
@@ -46,7 +57,11 @@ public final class OrderDtos {
     public record TableView(long tableId, String code, String status, boolean open) {
     }
 
-    public record TableOrdersView(TableView table, List<OrderDto> orders) {
+    /**
+     * Đơn của cả phiên (mọi điện thoại cùng bàn thấy chung).
+     * mineOrderIds: các đơn do chính máy đang hỏi đặt (máy đó được huỷ, hiện nhãn "BẠN ĐẶT").
+     */
+    public record TableOrdersView(TableView table, Long sessionId, List<OrderDto> orders, List<Long> mineOrderIds) {
     }
 
     /** Ảnh chụp ban đầu cho màn hình bếp: latestSeq được đọc TRƯỚC danh sách đơn. */
@@ -54,10 +69,5 @@ public final class OrderDtos {
     }
 
     public record EventPage(long latestSeq, List<EventEnvelope> events) {
-    }
-
-    /** Bàn nhìn từ phía bếp/nhân viên (không lộ qrToken). */
-    public record KitchenTableView(long id, String code, String status, Long sessionId, Long sessionOpenedAt,
-                                   long orderCount, long activeItemCount) {
     }
 }

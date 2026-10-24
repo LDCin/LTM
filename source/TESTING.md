@@ -3,7 +3,7 @@
 Có 3 mức test, nên làm theo thứ tự:
 
 1. **Test tay trên trình duyệt** (khoảng 15 phút): hiểu hệ thống chạy thế nào, dùng để tập demo.
-2. **Test tự động** (khoảng 1 phút): `mvn test` (16 ca) và `npm run e2e` (167 ca).
+2. **Test tự động** (khoảng 1 phút): `mvn test` (21 ca) và `npm run e2e` (16 nhóm).
 3. **Thực nghiệm đo hiệu năng** (khoảng 15 phút): lấy số liệu cho báo cáo.
 
 ---
@@ -54,53 +54,60 @@ Khi chạy bằng file jar, mọi trang đều ở cổng **8080**. Log in link 
 
 ## 1. Test tay trên trình duyệt
 
-Mở 3 tab, nên dùng 3 cửa sổ trình duyệt khác nhau hoặc một cửa sổ ẩn danh.
+Mở 4 tab. Ba trang nhân viên dùng chung phiên đăng nhập trong một trình duyệt, nên mỗi trang nhân viên nên mở ở một
+cửa sổ ẩn danh / trình duyệt khác.
 
 | Tab | Địa chỉ | Đăng nhập |
 |---|---|---|
 | Quản trị | http://localhost:8080/admin | `admin` / `admin123` |
 | Bếp | http://localhost:8080/kitchen | `bep` / `bep123` |
+| Thu ngân | http://localhost:8080/cashier | `thungan` / `thungan123` |
 | Khách | Bấm "Mở link gọi món" của một bàn ở trang Quản trị | – |
 
-Lưu ý: trang Bếp và trang Quản trị dùng chung phiên đăng nhập trong cùng một trình duyệt. Nếu đăng nhập admin
-ở tab Quản trị, tab Bếp cũng chạy bằng tài khoản admin (vẫn dùng được). Muốn thấy đúng tên `bep` ở bếp, dùng một
-cửa sổ ẩn danh cho tab Bếp.
+Lưu ý: nếu đăng nhập admin ở tab Quản trị, tab Bếp / Thu ngân trong cùng trình duyệt cũng chạy bằng tài khoản admin
+(vẫn dùng được, vì admin có mọi quyền). Muốn thấy đúng tên `bep` / `thungan`, dùng cửa sổ ẩn danh riêng.
 
 Nên bật chế độ điện thoại cho tab Khách: F12 → biểu tượng điện thoại (Toggle device toolbar).
+
+Không cần "mở bàn" trước: **phiên bàn tự mở** khi khách đầu tiên vào link gọi món (bàn đang phục vụ).
+Mọi điện thoại trong cùng phiên thấy **đơn chung** của bàn; chỉ máy đã đặt đơn mới huỷ được đơn đó.
 
 ### Checklist
 
 | # | Thao tác | Kết quả đúng |
 |---|---|---|
-| 1 | Khách thêm 2 món, mở giỏ, ghi chú "ít cay", bấm **Đặt món** | Hiện "Đã gửi đơn tới bếp!"; đơn xuất hiện ở "Đơn của bạn" với trạng thái "Chờ bếp nhận" |
-| 2 | Nhìn tab Bếp | Đơn hiện ngay ở cột **Mới** (không cần tải lại), có ghi chú 📝 |
-| 3 | Bếp bấm **Nhận** → **Bắt đầu nấu** → **Xong** | Đơn chuyển cột Mới → Đang làm → Sẵn sàng. Tab Khách đổi trạng thái theo, có thông báo "🔔 ... đã sẵn sàng!" |
-| 4 | Bếp bấm **Đã phục vụ** | Đơn biến mất khỏi bảng bếp; khách thấy "Đã phục vụ" |
-| 5 | Khách đặt đơn mới rồi bấm **Huỷ đơn** khi bếp chưa nhận | Đơn chuyển "Đã huỷ", biến mất khỏi bếp |
-| 6 | Bếp nhận một món, rồi khách thử huỷ đơn đó | Nút Huỷ đã biến mất (bếp nhận rồi thì không huỷ được) |
-| 7 | **Tính năng chính:** ở tab Bếp bấm **Giả lập mất mạng 5s**, trong 5 giây đó khách đặt một đơn | Badge bếp chuyển "Mất mạng" rồi "Đang kết nối lại"; khi xanh lại, đơn vẫn hiện; thanh thống kê có **Gửi bù: 1** |
-| 8 | Admin → **Cấu hình thực nghiệm** → chọn `NAIVE_PUSH`; tải lại tab Bếp; lặp lại bước 7 | Lần này đơn **không** hiện ở bếp (baseline bị mất đơn). Xong nhớ chọn lại `RELIABLE_PUSH` và tải lại bếp |
-| 9 | Admin → chọn `POLLING`; tải lại Bếp; khách đặt món | Badge bếp hiện "Polling"; đơn hiện chậm 0–3 giây. Chọn lại `RELIABLE_PUSH` |
-| 10 | Mở 2 tab Bếp, cùng bấm **Nhận** một món gần như cùng lúc | Một tab thành công, tab kia báo "Món vừa được người khác cập nhật" |
-| 11 | Bếp chọn tab **Quầy nước** | Chỉ còn đồ uống; chọn **Bếp** chỉ còn món ăn |
-| 12 | Đơn có nhiều món: bấm **Nhận cả đơn** | Tất cả món chuyển sang "Đã nhận" |
-| 13 | Khách đặt **Bò lúc lắc** cho tới khi hết 10 suất | Món tự chuyển "Hết món" trên mọi tab khách, không cần tải lại |
-| 14 | Admin → **Thực đơn**: bỏ tick "Còn bán" một món → **Lưu** | Tab Khách hiện "Hết món" ngay lập tức |
-| 15 | Admin → **Bàn & QR**: **Đóng bàn** đang mở ở tab Khách | Tab Khách báo "Bàn đã được đóng", nút + bị khoá |
-| 15a | **Riêng tư:** khách đặt món ở `http://localhost:8080/t/...`, rồi mở **cùng link** bằng `http://127.0.0.1:8080/t/...` (hoặc điện thoại khác / cửa sổ ẩn danh, coi như máy thứ hai) | Máy thứ hai thấy "Đơn của bạn (0)", không thấy đơn của máy thứ nhất, cũng không nhận thông báo về đơn đó |
-| 15b | Bếp bấm **🪑 Dọn bàn** → bấm **Dọn bàn** ở bàn vừa đặt | Nếu còn món chưa phục vụ thì hỏi xác nhận; sau khi dọn, máy khách tự về "Đơn của bạn (0)" và có thông báo "Bàn đã được dọn"; đơn chưa làm xong vẫn còn ở bảng bếp |
-| 16 | **Mở bàn** lại, rồi **Đổi mã QR** | Link cũ báo "Mã QR không hợp lệ"; link mới (QR mới) dùng được |
-| 17 | Mở http://localhost:8080/t/abc | Trang báo "Mã QR không hợp lệ" |
-| 18 | Đăng nhập Bếp sai mật khẩu; đăng nhập trang Admin bằng tài khoản `bep` | Báo "Sai tên đăng nhập..."; báo "không có quyền truy cập" |
+| 1 | Khách mở link gọi món của một bàn **trống** | Hiện hộp "Bạn tên gì?"; nhập "Minh" → hiện thực đơn, góc trên ghi "Bạn là: Minh". Tab Thu ngân thấy bàn chuyển "Đang ăn" (không cần tải lại) |
+| 2 | Khách thêm 2 món, mở giỏ, ghi chú "ít cay", bấm **Đặt món** | Hiện "Đã gửi đơn tới bếp!"; đơn xuất hiện ở "Đơn của bàn" với nhãn **BẠN ĐẶT**, trạng thái "Chờ bếp nhận" |
+| 3 | Nhìn tab Bếp | Đơn hiện ngay ở cột **Mới** (không cần tải lại), có ghi chú 📝, tên "Minh" và nhãn **Bàn mới mở** (đơn đầu tiên của phiên) |
+| 4 | Bếp bấm **Nhận** → **Bắt đầu nấu** → **Xong** | Đơn chuyển cột Mới → Đang làm → Sẵn sàng. Tab Khách đổi trạng thái theo, có thông báo "🔔 ... đã sẵn sàng!" |
+| 5 | Bếp bấm **Đã phục vụ** | Đơn biến mất khỏi bảng bếp; khách thấy "Đã phục vụ" |
+| 6 | Khách đặt đơn mới rồi bấm **Huỷ đơn** khi bếp chưa nhận | Đơn chuyển "Đã huỷ", biến mất khỏi bếp |
+| 7 | Bếp nhận một món, rồi khách thử huỷ đơn đó | Nút Huỷ đã biến mất (bếp nhận rồi thì không huỷ được) |
+| 8 | **Đơn chung:** mở **cùng link** bằng `http://127.0.0.1:8080/t/...` (hoặc điện thoại khác / cửa sổ ẩn danh, coi như máy thứ hai), nhập tên "Lan"; rồi máy "Lan" đặt một món | Máy "Lan" vào **cùng phiên**: thấy ngay các đơn của "Minh" (ghi tên "Minh", **không** có nút Huỷ). Đơn của "Lan" hiện ngay trên máy "Minh"; mục **Tổng cả bàn** cộng dồn đúng |
+| 9 | **Tính năng chính:** ở tab Bếp bấm **Giả lập mất mạng 5s**, trong 5 giây đó khách đặt một đơn | Badge bếp chuyển "Mất mạng" rồi "Đang kết nối lại"; khi xanh lại, đơn vẫn hiện; thanh thống kê có **Gửi bù: 1** |
+| 10 | Admin → **Cấu hình thực nghiệm** → chọn `NAIVE_PUSH`; tải lại tab Bếp; lặp lại bước 9 | Lần này đơn **không** hiện ở bếp (baseline bị mất đơn). Xong nhớ chọn lại `RELIABLE_PUSH` và tải lại bếp |
+| 11 | Admin → chọn `POLLING`; tải lại Bếp; khách đặt món | Badge bếp hiện "Polling"; đơn hiện chậm 0–3 giây. Chọn lại `RELIABLE_PUSH` |
+| 12 | Mở 2 tab Bếp, cùng bấm **Nhận** một món gần như cùng lúc | Một tab thành công, tab kia báo "Món vừa được người khác cập nhật" |
+| 13 | Bếp chọn tab **Quầy nước**; với đơn nhiều món bấm **Nhận cả đơn** | Chỉ còn đồ uống (chọn **Bếp** chỉ còn món ăn); tất cả món của đơn chuyển "Đã nhận" |
+| 14 | Khách đặt **Bò lúc lắc** cho tới khi hết 10 suất; Admin → **Thực đơn** bỏ tick "Còn bán" một món → **Lưu** | Món tự chuyển "Hết món" trên mọi tab khách, không cần tải lại |
+| 15 | **Thanh toán:** máy "Minh" bấm **Thanh toán** → **Tiền mặt tại quầy**; sau đó máy "Lan" cũng bấm **Thanh toán** | Cả hai máy hiện "Bàn đang thanh toán", nút + mờ (không gọi thêm được). Máy "Lan" **không** tạo lần thứ hai mà báo "Bạn cùng bàn đang thanh toán". Thu ngân thấy bàn màu cam "Chờ thanh toán" kèm số tiền |
+| 16 | Thu ngân bấm vào bàn → **Đã nhận tiền** → **Trả bàn** | Sau "Đã nhận tiền": khách hiện "Bàn đã thanh toán đủ", bàn chuyển "Đã thanh toán". Sau "Trả bàn": bàn về "Trống", mọi máy của bàn hiện "Cảm ơn quý khách"; bấm **Bắt đầu lượt mới** thì hỏi tên lại và danh sách đơn **trống** |
+| 17 | Admin → **Bàn & QR**: **Đóng bàn** khi bàn đang có khách; rồi đóng một bàn trống và mở link của bàn đó; **Mở bàn** lại; **Đổi mã QR** | Bàn có khách: không cho đóng ("Bàn đang có khách, cần thanh toán và trả bàn trước"). Bàn trống đã đóng: khách thấy "Bàn đang tạm ngừng phục vụ", thu ngân thấy bàn xám. Mở lại thì vào bình thường. Sau khi đổi mã: link cũ báo "Mã QR không hợp lệ", link mới dùng được |
+| 18 | Mở http://localhost:8080/t/abc; đăng nhập Bếp sai mật khẩu; đăng nhập trang Admin hoặc Thu ngân bằng tài khoản `bep` | Báo "Mã QR không hợp lệ"; báo "Sai tên đăng nhập..."; báo "không có quyền truy cập" |
 | 19 | Admin → **Giám sát** trong lúc làm các bước trên | Thấy số kết nối WebSocket, ACK seq của bếp, số request trùng bị chặn, số 409, số 429... |
 | 20 | Khách bấm **Đặt món** khi tắt server (Ctrl+C), đợi ~5 giây, bật lại server, bấm **Gửi lại** | Hiện banner "Có đơn chưa gửi được"; sau khi Gửi lại chỉ tạo **1** đơn (với H2, tắt server sẽ mất dữ liệu; nên thử bước này với MySQL) |
+
+Thanh toán **VNPay** sandbox cần mã merchant (biến môi trường `VNPAY_TMN_CODE`, `VNPAY_HASH_SECRET`) và chạy qua
+tunnel; thiếu cấu hình thì trang khách chỉ hiện "Tiền mặt". Cách cấu hình ở `SETUP.md` mục 12.7, các ca thử ở
+`TEST_CASES.md` (ca 32, 33). Danh sách ca test tay đầy đủ hơn (49 ca, gồm các tình huống mất mạng) nằm trong `TEST_CASES.md`.
 
 ### Xem gói tin thật (rất nên làm trước khi bảo vệ)
 
 F12 → tab **Network** → lọc **WS** → bấm vào kết nối `ws` → tab **Messages**. Sẽ thấy từng frame STOMP:
 `CONNECT`, `CONNECTED` (có `heart-beat:10000,10000`), `SUBSCRIBE`, `MESSAGE` (body JSON có `seq`), `SEND /app/ack`,
 `SEND /app/resume`, và ký tự xuống dòng là heart-beat. Với REST, lọc **Fetch/XHR** để xem header
-`Idempotency-Key`, `ETag` / `304 Not Modified`, `Retry-After`.
+`Idempotency-Key`, `X-Session-Id`, `ETag` / `304 Not Modified`, `Retry-After`. Trang Thu ngân có thêm frame
+`SUBSCRIBE /topic/cashier` và `MESSAGE` loại `TABLE_STATE_CHANGED` / `PAYMENT_UPDATED`.
 
 ---
 
@@ -113,7 +120,7 @@ cd source/server
 mvn test
 ```
 
-Kết quả đúng: `Tests run: 16, Failures: 0, Errors: 0`.
+Kết quả đúng: `Tests run: 21, Failures: 0, Errors: 0`.
 
 ### End-to-end (server phải đang chạy)
 
@@ -122,7 +129,7 @@ cd source/loadtest
 npm run e2e
 ```
 
-Kết quả đúng: `KẾT QUẢ: 167 đạt, 0 lỗi`. Mỗi dòng ✔ là một tính năng đã được kiểm chứng qua mạng thật;
+Kết quả đúng: `KẾT QUẢ: … đạt, 0 lỗi` (16 nhóm, nhóm 15 là phiên bàn nhiều điện thoại, nhóm 16 là thanh toán và thu ngân). Mỗi dòng ✔ là một tính năng đã được kiểm chứng qua mạng thật;
 dòng ✘ cho biết tính năng nào hỏng kèm dữ liệu thực tế. Bộ test dùng các bàn riêng mã `LTE...` và tự khôi phục
 cấu hình khi chạy xong, nên chạy lại bao nhiêu lần cũng được.
 
@@ -147,7 +154,7 @@ Bản rút gọn để thử nhanh: `node run-all.js --quick`.
 1. Điện thoại và máy chạy server dùng chung một Wi-Fi.
 2. Trên máy chủ, chạy `ipconfig` để xem địa chỉ IPv4, ví dụ `192.168.1.147`.
 3. Trên máy chủ, mở `http://192.168.1.147:8080/admin`. Mã QR trên trang sẽ chứa địa chỉ này.
-4. Dùng điện thoại quét QR của một bàn để gọi món.
+4. Dùng điện thoại quét QR của một bàn để gọi món (phiên bàn tự mở, không cần nhân viên bấm gì).
 
 Điện thoại không vào được: cho phép Java trong Windows Defender Firewall (Private network), hoặc mở cổng 8080.
 
@@ -161,4 +168,4 @@ Bản rút gọn để thử nhanh: `node run-all.js --quick`.
 | Server không khởi động, báo lỗi kết nối MySQL | MySQL chưa chạy hoặc sai mật khẩu: đặt biến `DB_PASSWORD`, hoặc dùng cách A (`h2`) |
 | `npm run e2e` báo "Không đăng nhập được admin" | Server chưa chạy hoặc chạy ở cổng khác: `node e2e-test.js --base=http://localhost:8081` |
 | Trang bếp báo "Lỗi kết nối" | Phiên đăng nhập hết hạn: bấm Đăng xuất rồi đăng nhập lại |
-| Đặt món bị 429 khi test tay quá nhanh | Rate limit đang bật (5 đơn/phút/bàn): đợi vài giây, hoặc tắt ở Admin → Cấu hình thực nghiệm |
+| Đặt món bị 429 khi test tay quá nhanh | Rate limit đang bật (10 đơn/phút/bàn): đợi vài giây, hoặc tắt ở Admin → Cấu hình thực nghiệm |
