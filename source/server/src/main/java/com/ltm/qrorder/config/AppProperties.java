@@ -66,7 +66,7 @@ public class AppProperties {
      */
     public static class Assistant {
         private String geminiApiKey = "";
-        private String geminiModel = "gemini-flash-latest";
+        private String geminiModel = "gemini-flash-lite-latest";
         private String geminiUrl = "https://generativelanguage.googleapis.com/v1beta/models";
         private int timeoutMs = 15000;
         /** Mỗi bàn: tối đa perTableCapacity câu hỏi liên tiếp, hồi perTableRefillPerMinute câu mỗi phút. */
