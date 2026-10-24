@@ -37,7 +37,7 @@ Thời gian ước tính: 45–60 phút cho lần đầu (phần lớn là thờ
 | Git | bản mới nhất | Nên có | Tải source code |
 | JDK (Java Development Kit) | **17** hoặc **21** (LTS). Không dùng bản mới hơn 23 (ví dụ 25, 27): Spring Boot 3.3 chỉ hỗ trợ Java 17–23 | Có | Biên dịch và chạy server Spring Boot |
 | Maven | 3.9 trở lên | Có (hoặc dùng Maven có sẵn trong IntelliJ) | Build server, chạy JUnit |
-| Node.js (kèm npm) | **18** trở lên (khuyến nghị bản LTS; dự án đã chạy với 20.18) | Có | Build giao diện React, chạy test e2e và thực nghiệm |
+| Node.js (kèm npm) | **18** trở lên (khuyến nghị bản LTS; dự án đã chạy với 20.18) | Chỉ khi sửa giao diện hoặc chạy test | Build giao diện React, chạy test e2e và thực nghiệm |
 | MySQL Server | **8.0** (dự án đã test với 8.0.39) | Có | Cơ sở dữ liệu |
 | MySQL Workbench | bản đi kèm MySQL | Không | Xem dữ liệu bằng giao diện |
 | IntelliJ IDEA Community | bản mới nhất | Có | IDE: chạy server, đọc/sửa code Java và React, có terminal tích hợp |
@@ -283,11 +283,11 @@ Server đọc mật khẩu MySQL từ biến môi trường `DB_PASSWORD`. Chỉ
 
 Trong tab **Terminal** của IntelliJ (`Alt + F12`), chạy lần lượt.
 
-### 8.1. Build giao diện (bắt buộc làm trước khi build server)
+### 8.1. Build giao diện (chỉ cần khi sửa code React)
 
-Giao diện React được build thẳng vào thư mục `server/src/main/resources/static/` để server phục vụ luôn. Thư mục này
-**không có sẵn trong Git**, nên nếu bỏ qua bước này thì server vẫn chạy nhưng mở `http://localhost:8080` sẽ không có
-giao diện.
+Giao diện React được build thẳng vào thư mục `server/src/main/resources/static/` để server phục vụ luôn. Bản build
+**đã có sẵn trong Git**, nên vừa pull về là chạy server được ngay, không cần cài Node.js. Chỉ làm bước này khi sửa code
+React, và nhớ commit cả thư mục `static/` sau khi build.
 
 ```bash
 cd C:\Projects\LTM\source\client
@@ -654,7 +654,7 @@ node run-all.js
 | Server báo `Access denied for user 'root'@'localhost'` | Chưa khai báo hoặc sai `DB_PASSWORD` (Bước 7.3; chạy bằng terminal thì Bước 9.2) |
 | Server báo `Communications link failure` | MySQL chưa chạy: mở `services.msc` → **MySQL80** → **Start** |
 | `Port 8080 was already in use` | Đã có server khác đang chạy (lần chạy trước chưa tắt, hoặc vừa chạy trong IntelliJ vừa chạy bằng terminal). Tắt bớt một cái |
-| Mở `http://localhost:8080` chỉ thấy trang lỗi, không có giao diện | Chưa chạy `npm run build` (Bước 8.1). Build giao diện rồi chạy lại server |
+| Mở `http://localhost:8080` chỉ thấy trang lỗi, không có giao diện | Thư mục `static/` bị thiếu (chưa pull bản mới hoặc lỡ xoá). Chạy `git pull`, hoặc build lại giao diện (Bước 8.1) rồi chạy lại server |
 | Mở địa chỉ tunnel báo lỗi 502 / "failed to complete tunnel connection" / "origin unreachable" | Server chưa chạy hoặc chạy cổng khác cổng tunnel trỏ tới. Kiểm tra `http://localhost:8080` trên máy chủ trước |
 | Qua tunnel, trang mở được nhưng không cập nhật real-time (badge không xanh, đơn không tự hiện ở bếp) | WebSocket không đi qua được: kiểm tra dịch vụ tunnel có hỗ trợ WebSocket (ngrok và cloudflared đều có); đảm bảo tunnel trỏ tới **8080**, không phải 5173 |
 | Điện thoại quét QR nhưng mở ra `localhost` | Trang Quản trị đang được mở bằng `localhost`. Mở lại bằng địa chỉ tunnel (Bước 12.4) hoặc sửa ô "Địa chỉ in trong QR", rồi in lại QR |
@@ -672,7 +672,7 @@ node run-all.js
 1. `git clone https://github.com/LDCin/LTM.git`, mở `LTM/source/server` bằng IntelliJ, chọn JDK 17.
 2. **Run → Edit Configurations → QrOrderApplication → Environment variables**:
    `DB_PASSWORD=mat_khau_root_cua_ban;AUTH_SECRET=mot-chuoi-ngau-nhien-that-dai`.
-3. Terminal IntelliJ: `cd C:\Projects\LTM\source\client`, `npm install`, `npm run build`.
+3. (Chỉ khi sửa code React) Terminal IntelliJ: `cd C:\Projects\LTM\source\client`, `npm install`, `npm run build`.
 4. Bấm ▶ chạy `QrOrderApplication`, chờ `Started QrOrderApplication`.
 5. Terminal khác: `ngrok http 8080` (hoặc `cloudflared tunnel --url http://localhost:8080`).
 6. Mở `https://<dia-chi-tunnel>/admin` (`admin` / `admin123`) để in mã QR cho điện thoại.
