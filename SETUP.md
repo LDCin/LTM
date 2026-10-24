@@ -584,6 +584,14 @@ DB_PASSWORD=...;AUTH_SECRET=...;VNPAY_TMN_CODE=<ma-website>;VNPAY_HASH_SECRET=<c
   server tự lấy theo địa chỉ khách đang mở trang (đúng khi khách mở bằng địa chỉ tunnel).
 * Nên dùng **ngrok với tên miền cố định** (`ngrok http 8080 --url=<ten-mien>.ngrok-free.dev`), vì IPN URL khai báo với
   VNPay phải giữ nguyên: `https://<ten-mien>.ngrok-free.dev/api/payments/vnpay/ipn`.
+* **Khai báo IPN URL trên trang Merchant Admin** (chỉ người giữ tài khoản sandbox làm, một lần):
+  1. Mở https://sandbox.vnpayment.vn/merchantv2/, đăng nhập bằng email và mật khẩu trong email VNPay gửi khi đăng ký.
+  2. Vào phần quản lý website / cấu hình merchant, chọn website có mã TMN của nhóm.
+  3. Ở ô **IPN URL**, điền `https://<ten-mien>.ngrok-free.dev/api/payments/vnpay/ipn` → lưu.
+  4. Kiểm tra: chạy server và ngrok, thanh toán thử, rồi mở Quản trị → **💳 Thanh toán**. Cột **Xác nhận bởi** là
+     `vnpay-ipn` nghĩa là IPN đã về; còn `vnpay-return` nghĩa là IPN chưa tới (sai địa chỉ, ngrok tắt, hoặc VNPay chưa áp dụng cấu hình mới).
+
+  Đổi tên miền ngrok thì phải vào sửa lại ô này.
 * Cách thử: khách bấm **Thanh toán → VNPay** → trang VNPay → **Thẻ nội địa và tài khoản ngân hàng** → **NCB**, nhập
   thẻ test của VNPay sandbox: số thẻ `9704198526191432198`, tên `NGUYEN VAN A`, ngày phát hành `07/15`, OTP `123456` →
   VNPay đưa về trang gọi món, bàn hiện "Đã thanh toán đủ", thu ngân thấy bàn chuyển "Đã thanh toán".
