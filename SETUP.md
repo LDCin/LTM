@@ -563,8 +563,8 @@ Server giới hạn request theo địa chỉ IP (60 request dồn, hồi 20 req
 
 ### 12.7. Thanh toán VNPay (sandbox) qua tunnel
 
-VNPay chỉ hiện trên trang khách khi server có đủ hai biến môi trường. Thêm vào ô **Environment variables** ở Bước 7.3
-(lấy mã trong email VNPay gửi khi đăng ký sandbox; **không** ghi vào file nào trong dự án):
+`application.yml` đã có sẵn khoá VNPay sandbox của nhóm, nên VNPay hiện ngay mà không cần khai báo gì. Muốn dùng merchant
+khác thì thêm hai biến môi trường vào ô **Environment variables** ở Bước 7.3 (chúng ghi đè giá trị mặc định):
 
 ```text
 DB_PASSWORD=...;AUTH_SECRET=...;VNPAY_TMN_CODE=<ma-website>;VNPAY_HASH_SECRET=<chuoi-bi-mat>;APP_PUBLIC_URL=https://<ten-mien-ngrok>

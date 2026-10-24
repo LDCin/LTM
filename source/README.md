@@ -187,7 +187,7 @@ lạc quan hơn nhiều so với MySQL. Số liệu đưa vào báo cáo nên đ
 | `app.session.idle-timeout-minutes` | `30` | Phiên không gọi món quá 30 phút -> tự kết thúc |
 | `app.session.auto-checkout-after-paid-minutes` | `30` | Đã trả đủ, 30 phút chưa ai bấm Trả bàn -> tự trả bàn |
 | `app.payment.expire-minutes` | `15` | Hạn mỗi lần thanh toán |
-| `VNPAY_TMN_CODE`, `VNPAY_HASH_SECRET` (biến môi trường) | trống | Mã merchant VNPay sandbox; thiếu thì ẩn VNPay |
+| `VNPAY_TMN_CODE`, `VNPAY_HASH_SECRET` (biến môi trường) | khoá sandbox của nhóm (trong `application.yml`) | Mã merchant VNPay sandbox; để trống thì ẩn VNPay |
 | `APP_PUBLIC_URL` (biến môi trường) | trống | Địa chỉ tunnel cho Return URL của VNPay; trống thì lấy theo request |
 | `app.ws.heartbeat-ms` | `10000` | Chu kỳ heart-beat STOMP |
 | `app.ws.max-connections-per-table` | `8` | Số kết nối WebSocket tối đa mỗi bàn |
