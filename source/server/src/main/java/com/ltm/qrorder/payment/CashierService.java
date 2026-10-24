@@ -11,6 +11,7 @@ import com.ltm.qrorder.payment.PaymentDtos.CheckoutReason;
 import com.ltm.qrorder.payment.PaymentDtos.CheckoutRequest;
 import com.ltm.qrorder.payment.PaymentDtos.PaymentDto;
 import com.ltm.qrorder.payment.PaymentRepository.PaymentRow;
+import com.ltm.qrorder.servicecall.ServiceCallRepository;
 import com.ltm.qrorder.table.TableInfo;
 import com.ltm.qrorder.table.TableService;
 import org.slf4j.Logger;
@@ -39,9 +40,12 @@ public class CashierService {
     private final PaymentService paymentService;
     private final AppProperties props;
     private final Metrics metrics;
+    private final ServiceCallRepository serviceCalls;
 
     public CashierService(TableService tables, OrderRepository orders, PaymentRepository payments,
-                          PaymentService paymentService, AppProperties props, Metrics metrics) {
+                          PaymentService paymentService, AppProperties props, Metrics metrics,
+                          ServiceCallRepository serviceCalls) {
+        this.serviceCalls = serviceCalls;
         this.tables = tables;
         this.orders = orders;
         this.payments = payments;
@@ -65,7 +69,7 @@ public class CashierService {
     CashierTableView view(TableInfo t) {
         if (!t.hasSession()) {
             return new CashierTableView(t.id(), t.code(), t.inService(), null, null,
-                    t.inService() ? "EMPTY" : "OUT_OF_SERVICE", 0, 0, 0, 0, 0, null, null, false);
+                    t.inService() ? "EMPTY" : "OUT_OF_SERVICE", 0, 0, 0, 0, 0, null, null, false, null);
         }
         long sessionId = t.sessionId();
         long total = payments.sessionTotal(sessionId);
@@ -82,7 +86,7 @@ public class CashierService {
         return new CashierTableView(t.id(), t.code(), t.inService(), sessionId, tables.sessionOpenedAt(sessionId),
                 state, total, paid, total - paid, orders.countOrdersInSession(sessionId),
                 orders.countActiveItemsInSession(sessionId), pending, payments.lastPaidAt(sessionId),
-                payments.sessionNeedsRefund(sessionId));
+                payments.sessionNeedsRefund(sessionId), serviceCalls.findOpen(sessionId).orElse(null));
     }
 
     /**

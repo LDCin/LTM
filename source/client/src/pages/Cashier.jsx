@@ -19,6 +19,24 @@ const REASONS = [
   ['OTHER', 'Lý do khác'],
 ];
 
+/** Tiếng "ting" ngắn khi có khách gọi (Web Audio, không cần file âm thanh). Trình duyệt chặn thì bỏ qua. */
+function beep() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.frequency.value = 880;
+    gain.gain.setValueAtTime(0.2, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.6);
+    osc.onended = () => ctx.close();
+  } catch {
+    // không phát được âm thanh: vẫn còn toast và ô bàn nhấp nháy
+  }
+}
+
 export default function Cashier() {
   const [session, setSession] = useState(() => {
     const s = getStaffSession();
@@ -49,6 +67,7 @@ function CashierBoard({ session, onLogout }) {
   const [conn, setConn] = useState({ status: 'connecting' });
   const [toast, setToast] = useState(null);
   const [now, setNow] = useState(Date.now());
+  const [calls, setCalls] = useState([]); // lượt khách gọi phục vụ đang chờ, cũ nhất trước
   const reloadTimer = useRef(null);
 
   const api = useCallback(
@@ -64,7 +83,9 @@ function CashierBoard({ session, onLogout }) {
   );
 
   const loadTables = useCallback(async () => {
-    setTables(await api('GET', '/api/cashier/tables'));
+    const [list, open] = await Promise.all([api('GET', '/api/cashier/tables'), api('GET', '/api/cashier/service-calls')]);
+    setTables(list);
+    setCalls(open);
   }, [api]);
 
   const loadDetail = useCallback(
@@ -94,10 +115,14 @@ function CashierBoard({ session, onLogout }) {
       connectHeaders: { Authorization: `Bearer ${token}` },
       onStatus: (status, info) => setConn({ status, info }),
       onConnected: (client) => {
-        // /topic/cashier: TABLE_STATE_CHANGED, PAYMENT_UPDATED -> sơ đồ bàn tự cập nhật
+        // /topic/cashier: TABLE_STATE_CHANGED, PAYMENT_UPDATED, SERVICE_CALL_UPDATED -> sơ đồ bàn tự cập nhật
         client.subscribe('/topic/cashier', (msg) => {
           if (msg.type === 'PAYMENT_UPDATED' && msg.payment?.status === 'PAID') {
             setToast(`Bàn ${msg.payment.tableCode}: đã nhận ${formatVnd(msg.payment.amount)} (${METHOD_LABEL[msg.payment.method]})`);
+          }
+          if (msg.type === 'SERVICE_CALL_UPDATED' && !msg.call.handledAt) {
+            setToast(`🙋 Bàn ${msg.call.tableCode} gọi phục vụ${msg.call.guestName ? ` (${msg.call.guestName})` : ''}`);
+            beep();
           }
           scheduleReload();
         });
@@ -183,11 +208,32 @@ function CashierBoard({ session, onLogout }) {
         </button>
       </header>
 
+      {calls.length > 0 && (
+        <section className="service-calls">
+          <h2>🙋 Khách gọi phục vụ ({calls.length})</h2>
+          {calls.map((c) => (
+            <div key={c.id} className="service-call">
+              <span className="who">
+                <strong>Bàn {c.tableCode}</strong>
+                {c.guestName && ` · ${c.guestName}`} · {minutesSince(c.createdAt, now)} phút trước
+              </span>
+              <button
+                className="btn small ok"
+                onClick={() => act(() => api('POST', `/api/cashier/service-calls/${c.id}/handle`), `Đã xử lý bàn ${c.tableCode}`)}
+              >
+                Đã xử lý
+              </button>
+            </div>
+          ))}
+        </section>
+      )}
+
       <div className="cashier-grid">
         {tables.map((t) => (
-          <button key={t.id} className={`cashier-card state-${t.state}`} onClick={() => open(t.id)}>
+          <button key={t.id} className={`cashier-card state-${t.state} ${t.serviceCall ? 'calling' : ''}`} onClick={() => open(t.id)}>
             <h3>Bàn {t.code}</h3>
             <span className="state">{STATE_LABEL[t.state]}</span>
+            {t.serviceCall && <span className="call">🙋 Đang gọi phục vụ</span>}
             {t.sessionId && (
               <>
                 <span className="money">{formatVnd(t.total)}</span>

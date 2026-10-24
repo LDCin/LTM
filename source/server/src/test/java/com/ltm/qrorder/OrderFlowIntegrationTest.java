@@ -248,6 +248,57 @@ class OrderFlowIntegrationTest {
         assertTrue(join(token, device()).get("sessionId").asLong() != session, "khách sau được phiên mới");
     }
 
+    // ================================================================ gọi phục vụ
+
+    @Test
+    void serviceCallIsDedupedPerSessionAndHandledByCashier() {
+        String token = token("B08");
+        long tableId = tableId("B08");
+        String devA = device();
+        String devB = device();
+        long session = join(token, devA).get("sessionId").asLong();
+        join(token, devB);
+
+        ResponseEntity<JsonNode> first = http.postForEntity("/api/service-calls",
+                json("{\"guestName\":\"  Lan  \"}", customerHeaders(token, devA, session)), JsonNode.class);
+        assertEquals(201, first.getStatusCode().value());
+        assertEquals("Lan", first.getBody().get("guestName").asText());
+        long callId = first.getBody().get("id").asLong();
+
+        ResponseEntity<JsonNode> again = http.postForEntity("/api/service-calls",
+                json("{}", customerHeaders(token, devB, session)), JsonNode.class);
+        assertEquals(200, again.getStatusCode().value(), "máy khác cùng bàn bấm lại -> dùng chung lượt đang mở");
+        assertEquals(callId, again.getBody().get("id").asLong());
+
+        String cashierToken = login("thungan", "thungan123");
+        JsonNode open = http.exchange("/api/cashier/service-calls", HttpMethod.GET,
+                new HttpEntity<>(bearer(cashierToken)), JsonNode.class).getBody();
+        assertEquals(1, open.size());
+        JsonNode tile = http.exchange("/api/cashier/tables/" + tableId, HttpMethod.GET,
+                new HttpEntity<>(bearer(cashierToken)), JsonNode.class).getBody().get("table");
+        assertEquals(callId, tile.get("serviceCall").get("id").asLong(), "sơ đồ bàn hiện lượt gọi");
+
+        assertEquals(403, http.postForEntity("/api/cashier/service-calls/" + callId + "/handle",
+                new HttpEntity<>(bearer(kitchenToken)), JsonNode.class).getStatusCode().value(), "bếp không xử lý được");
+        ResponseEntity<JsonNode> handled = http.postForEntity("/api/cashier/service-calls/" + callId + "/handle",
+                new HttpEntity<>(bearer(cashierToken)), JsonNode.class);
+        assertEquals(200, handled.getStatusCode().value());
+        assertEquals("thungan", handled.getBody().get("handledBy").asText());
+        assertEquals(200, http.postForEntity("/api/cashier/service-calls/" + callId + "/handle",
+                new HttpEntity<>(bearer(cashierToken)), JsonNode.class).getStatusCode().value(), "bấm lặp không lỗi");
+
+        assertEquals(204, http.exchange("/api/service-calls/current", HttpMethod.GET,
+                new HttpEntity<>(customerHeaders(token, devA, session)), JsonNode.class).getStatusCode().value());
+        assertEquals(201, http.postForEntity("/api/service-calls", json("{}", customerHeaders(token, devA, session)),
+                JsonNode.class).getStatusCode().value(), "xử lý xong thì gọi lại được");
+
+        http.postForEntity("/api/cashier/tables/" + tableId + "/checkout", json("{}", bearer(cashierToken)), JsonNode.class);
+        assertEquals(0, http.exchange("/api/cashier/service-calls", HttpMethod.GET,
+                new HttpEntity<>(bearer(cashierToken)), JsonNode.class).getBody().size(), "trả bàn -> lượt gọi biến mất");
+        assertEquals(409, http.postForEntity("/api/service-calls", json("{}", customerHeaders(token, devA, session)),
+                JsonNode.class).getStatusCode().value(), "phiên đã kết thúc không gọi được");
+    }
+
     // ================================================================ thanh toán tiền mặt, trả bàn
 
     @Test

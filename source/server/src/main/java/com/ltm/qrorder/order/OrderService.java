@@ -343,7 +343,7 @@ public class OrderService {
     }
 
     /** Tên khách: bỏ khoảng trắng thừa, tối đa 20 ký tự; rỗng = không có tên. */
-    static String normalizeGuestName(String name) {
+    public static String normalizeGuestName(String name) {
         if (name == null) {
             return null;
         }

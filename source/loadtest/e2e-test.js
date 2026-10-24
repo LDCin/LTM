@@ -824,6 +824,49 @@ async function testPaymentsAndCashier() {
   [cashierWs, kitchenOnCashier, custWs].forEach((s) => s.client.disconnect());
 }
 
+async function testServiceCalls() {
+  const table = ctx.tables[6];
+  const tok = table.qrToken;
+  await call('POST', `/api/cashier/tables/${table.id}/checkout`, { token: ctx.thungan, body: { reason: 'OTHER' } });
+  const join = (await call('POST', `/api/public/tables/${tok}/join`, { tableToken: tok })).data;
+  const session = { 'X-Session-Id': String(join.sessionId) };
+
+  const cashierWs = await stomp({ Authorization: `Bearer ${ctx.thungan}` });
+  const cashierMsgs = collect(cashierWs, '/topic/cashier');
+  const custWs = await stomp({ tableToken: tok });
+  const custMsgs = collect(custWs, `/topic/table.${table.id}`);
+  await sleep(300);
+
+  const first = await call('POST', '/api/service-calls', { tableToken: tok, headers: session, body: { guestName: 'Hà' } });
+  check('Khách bấm Gọi phục vụ -> 201, lưu tên khách', first.status === 201 && first.data.guestName === 'Hà' && !first.data.handledAt, first.data);
+  const racers = await Promise.all(Array.from({ length: 5 }, () =>
+    call('POST', '/api/service-calls', { tableToken: tok, headers: { ...session, 'X-Device-Id': randomKey() }, body: {} })));
+  check('5 máy cùng bàn bấm cùng lúc -> vẫn chỉ 1 lượt gọi (200, cùng id)',
+    racers.every((r) => r.status === 200 && r.data.id === first.data.id), racers.map((r) => r.status));
+  await waitFor(() => cashierMsgs.some((m) => m.type === 'SERVICE_CALL_UPDATED'), 3000);
+  check('Quầy lễ tân nhận SERVICE_CALL_UPDATED real-time, đúng 1 lần',
+    cashierMsgs.filter((m) => m.type === 'SERVICE_CALL_UPDATED').length === 1, cashierMsgs.map((m) => m.type));
+  const open = (await call('GET', '/api/cashier/service-calls', { token: ctx.thungan })).data;
+  check('Danh sách lượt gọi đang chờ có bàn này', open.some((c) => c.id === first.data.id && c.tableCode === table.code), open);
+  const byKitchen = await call('POST', `/api/cashier/service-calls/${first.data.id}/handle`, { token: ctx.bep });
+  check('Tài khoản bếp bấm "Đã xử lý" -> 403', byKitchen.status === 403, byKitchen.status);
+
+  const handled = await call('POST', `/api/cashier/service-calls/${first.data.id}/handle`, { token: ctx.thungan });
+  check('Lễ tân bấm "Đã xử lý" -> ghi người xử lý', handled.status === 200 && handled.data.handledBy === 'thungan', handled.data);
+  await waitFor(() => custMsgs.some((m) => m.type === 'SERVICE_CALL_UPDATED' && m.call.handledAt), 3000);
+  check('Điện thoại khách nhận thông báo đã xử lý', custMsgs.some((m) => m.type === 'SERVICE_CALL_UPDATED' && m.call.handledAt));
+  const current = await call('GET', '/api/service-calls/current', { tableToken: tok, headers: session });
+  check('Không còn lượt gọi đang mở (204)', current.status === 204, current.status);
+
+  await call('POST', '/api/service-calls', { tableToken: tok, headers: session, body: {} });
+  await call('POST', `/api/cashier/tables/${table.id}/checkout`, { token: ctx.thungan, body: { reason: 'OTHER' } });
+  const afterCheckout = (await call('GET', '/api/cashier/service-calls', { token: ctx.thungan })).data;
+  check('Trả bàn -> lượt gọi của phiên cũ biến mất', !afterCheckout.some((c) => c.tableId === table.id), afterCheckout);
+  const stale = await call('POST', '/api/service-calls', { tableToken: tok, headers: session, body: {} });
+  check('Máy của lượt cũ gọi phục vụ -> 409 SESSION_ENDED', stale.status === 409 && stale.data.error === 'SESSION_ENDED', stale.data);
+  [cashierWs, custWs].forEach((s) => s.client.disconnect());
+}
+
 // ================================================================== chạy
 
 (async () => {
@@ -850,6 +893,7 @@ async function testPaymentsAndCashier() {
   await section('14. Giao đơn tin cậy khi bếp mất mạng (thư viện client)', testReliableFeed);
   await section('15. Phiên bàn: nhiều điện thoại, đơn chung, tên khách, trả bàn', testSharedSessionAndNames);
   await section('16. Thanh toán và quầy thu ngân', testPaymentsAndCashier);
+  await section('17. Gọi phục vụ', testServiceCalls);
   await teardown().catch((e) => console.error('Dọn dẹp lỗi:', e.message));
 
   console.log(`\n================ KẾT QUẢ: ${passed} đạt, ${failures.length} lỗi ================`);

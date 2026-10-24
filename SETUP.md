@@ -411,8 +411,11 @@ Luồng thử 2 phút:
 4. Bếp bấm **Nhận** → **Bắt đầu nấu** → **Xong**: trang khách đổi trạng thái theo.
 5. Trên màn hình bếp bấm **Giả lập mất mạng 5s**, trong lúc đó đặt thêm một đơn: khi bếp kết nối lại, đơn vẫn hiện
    và thanh thống kê có **Gửi bù**.
-6. Trên trang khách bấm **Thanh toán** → chọn **Tiền mặt tại quầy**. Mở trang Thu ngân (cửa sổ ẩn danh khác): bàn chuyển
-   màu cam "Chờ thanh toán" → bấm vào bàn → **Đã nhận tiền** → **Trả bàn**. Trang khách hiện "Cảm ơn quý khách".
+6. Mở trang Thu ngân (cửa sổ ẩn danh khác). Trên trang khách bấm **🙋 Gọi phục vụ**: trang Thu ngân kêu "ting", hiện
+   khung đỏ "Khách gọi phục vụ" và ô bàn nhấp nháy. Lễ tân điều phối nhân viên qua bộ đàm rồi bấm **Đã xử lý**: điện
+   thoại khách hiện "Nhân viên đã nhận yêu cầu và đang tới bàn bạn".
+7. Trên trang khách bấm **Thanh toán** → chọn **Tiền mặt tại quầy**. Trên trang Thu ngân, bàn chuyển màu cam "Chờ thanh
+   toán" → bấm vào bàn → **Đã nhận tiền** → **Trả bàn**. Trang khách hiện "Cảm ơn quý khách".
 
 Giải thích các khái niệm mới:
 
@@ -421,7 +424,7 @@ Giải thích các khái niệm mới:
 * **Đóng bàn / Mở bàn** ở trang Quản trị = **ngừng phục vụ / phục vụ lại** (bảo trì), không liên quan tới lượt khách.
   Không đóng được bàn đang có khách.
 
-Checklist đầy đủ 20 bước nằm trong [`source/TESTING.md`](source/TESTING.md).
+Checklist đầy đủ 21 bước nằm trong [`source/TESTING.md`](source/TESTING.md).
 
 ---
 
@@ -617,7 +620,7 @@ cd C:\Projects\LTM\source\server
 mvn test
 ```
 
-Kết quả đúng: `Tests run: 21, Failures: 0, Errors: 0`. Test chạy bằng cơ sở dữ liệu H2 riêng, không đụng tới MySQL.
+Kết quả đúng: `Tests run: 22, Failures: 0, Errors: 0`. Test chạy bằng cơ sở dữ liệu H2 riêng, không đụng tới MySQL.
 
 ### 13.2. End-to-end (server phải đang chạy ở cổng 8080)
 
@@ -626,7 +629,7 @@ cd C:\Projects\LTM\source\loadtest
 npm run e2e
 ```
 
-Kết quả đúng: `KẾT QUẢ: 181 đạt, 0 lỗi` (cần Node.js và đã chạy `npm install` ở Bước 8.3). Nếu server chạy cổng khác:
+Kết quả đúng: `KẾT QUẢ: 193 đạt, 0 lỗi` (cần Node.js và đã chạy `npm install` ở Bước 8.3). Nếu server chạy cổng khác:
 `node e2e-test.js --base=http://localhost:8081`.
 
 ---

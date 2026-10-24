@@ -719,7 +719,7 @@ source/
 
 ### 7.5. Kiểm thử
 
-`mvn test` chạy 21 test JUnit, tất cả đều qua (báo cáo surefire ngày 24/10/2026: `OrderFlowIntegrationTest` 15, `OrderItemStatusTest` 3, `TokenBucketTest` 3):
+`mvn test` chạy 22 test JUnit, tất cả đều qua (báo cáo surefire ngày 25/10/2026: `OrderFlowIntegrationTest` 16, `OrderItemStatusTest` 3, `TokenBucketTest` 3):
 
 | Lớp test | Test | Kiểm tra |
 |---|---|---|
@@ -740,8 +740,9 @@ source/
 | | `cashPaymentFlowAndCheckout` | Thanh toán tiền mặt, thu ngân xác nhận, trả bàn |
 | | `vnpayIpnVerifiesSignatureAmountAndIsIdempotent` | IPN (khoá giả của môi trường test): sai chữ ký → `97`, sai số tiền → `04`, hợp lệ → `00` và `PAID`, gọi lặp → `02` |
 | | `vnpayHmacMatchesWhenRecomputed` | Chữ ký HMAC-SHA512 tính lại khớp; đổi một tham số thì không khớp |
+| | `serviceCallIsDedupedPerSessionAndHandledByCashier` | Gọi phục vụ: nhiều máy cùng bàn gọi → 1 lượt; bếp không xử lý được (403); thu ngân xử lý, gọi lặp không lỗi; trả bàn → lượt gọi biến mất; máy của lượt cũ bị chặn |
 
-Ngoài JUnit, bộ kiểm thử end-to-end `source/loadtest/e2e-test.js` chạy trên máy chủ thật, gồm 16 nhóm; nhóm 15 kiểm tra phiên bàn nhiều điện thoại (đơn chung, tên khách, trả bàn), nhóm 16 kiểm tra thanh toán và quầy thu ngân (gồm phân quyền `/api/cashier` và `/topic/cashier`, IPN VNPay giả lập). [CẦN ĐIỀN: kết quả lần chạy `npm run e2e` mới nhất]
+Ngoài JUnit, bộ kiểm thử end-to-end `source/loadtest/e2e-test.js` chạy trên máy chủ thật, gồm 17 nhóm; nhóm 15 kiểm tra phiên bàn nhiều điện thoại (đơn chung, tên khách, trả bàn), nhóm 16 kiểm tra thanh toán và quầy thu ngân (gồm phân quyền `/api/cashier` và `/topic/cashier`, IPN VNPay giả lập), nhóm 17 kiểm tra gọi phục vụ (gộp lượt gọi trùng, thông báo real-time tới quầy và tới điện thoại khách). Lần chạy ngày 25/10/2026 trên cơ sở dữ liệu H2: `KẾT QUẢ: 193 đạt, 0 lỗi`.
 
 Kiểm thử thủ công khả năng chịu lỗi: trên màn hình bếp bấm "Giả lập mất mạng 5s" trong khi đặt món từ điện thoại; sau khi kết nối lại, bếp tự RESUME và thanh thống kê hiển thị số sự kiện "Gửi bù". Các ca test tay về đơn chung, thanh toán, trả bàn và VNPay (thẻ test NCB qua tunnel) nằm trong `TEST_CASES.md`. [CẦN ĐIỀN: ảnh chụp màn hình demo]
 
