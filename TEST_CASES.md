@@ -98,9 +98,20 @@ Có hai cách làm "mất mạng":
 
 ---
 
-## 6. Test tự động
+## 6. Gọi phục vụ
+
+| # | Tình huống | Kết quả đúng | Kết quả |
+|---|---|---|---|
+| 50 | Khách bấm **🙋 Gọi phục vụ** | Khách: nút chuyển "⏳ Đang gọi…". Thu ngân: có tiếng "ting", khung đỏ "Khách gọi phục vụ" hiện bàn, tên khách và số phút; ô bàn nhấp nháy viền đỏ | |
+| 51 | Hai điện thoại cùng bàn lần lượt bấm **Gọi phục vụ** | Thu ngân chỉ thấy **1** dòng cho bàn đó; điện thoại thứ hai cũng hiện "Đang gọi…" | |
+| 52 | Thu ngân bấm **Đã xử lý** | Dòng biến mất, ô bàn hết nhấp nháy; mọi điện thoại của bàn hiện "Nhân viên đã nhận yêu cầu và đang tới bàn bạn", nút trở lại bình thường và gọi lại được | |
+| 53 | Khách gọi phục vụ rồi thu ngân **Trả bàn** | Lượt gọi của bàn biến mất khỏi khung "Khách gọi phục vụ" | |
+
+---
+
+## 7. Test tự động
 
 | Lệnh | Kỳ vọng |
 |---|---|
-| `cd source/server` → `mvn test` | `Tests run: 21, Failures: 0, Errors: 0` |
-| Server đang chạy → `cd source/loadtest` → `npm run e2e` | `KẾT QUẢ: 181 đạt, 0 lỗi` (16 nhóm) |
+| `cd source/server` → `mvn test` | `Tests run: 22, Failures: 0, Errors: 0` |
+| Server đang chạy → `cd source/loadtest` → `npm run e2e` | `KẾT QUẢ: 193 đạt, 0 lỗi` (17 nhóm) |

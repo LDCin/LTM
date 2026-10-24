@@ -84,6 +84,8 @@ export default function Customer() {
   const [showPay, setShowPay] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [paying, setPaying] = useState(false);
+  const [serviceCall, setServiceCall] = useState(null); // lượt gọi phục vụ đang chờ nhân viên
+  const [calling, setCalling] = useState(false);
   const [pending, setPending] = useState(() => readJson(pendingKey(token)));
   const etagRef = useRef(null);
   const payKeyRef = useRef(null); // Idempotency-Key của lần bấm "Thanh toán" đang xử lý
@@ -141,6 +143,13 @@ export default function Customer() {
     setBill(data);
   }, [token, sessionId]);
 
+  // Lượt gọi phục vụ đang mở của bàn (204 = không có)
+  const loadServiceCall = useCallback(async () => {
+    if (!sessionId) return;
+    const { data } = await request('GET', '/api/service-calls/current', { tableToken: token, sessionId });
+    setServiceCall(data || null);
+  }, [token, sessionId]);
+
   // Vào bàn: vào phiên đang có hoặc mở phiên mới nếu bàn trống
   const join = useCallback(async () => {
     setPhase('loading');
@@ -177,7 +186,8 @@ export default function Customer() {
     if (phase !== 'ready' || !sessionId) return;
     loadOrders().catch(handleError);
     loadBill().catch(() => {});
-  }, [phase, sessionId, loadOrders, loadBill, handleError]);
+    loadServiceCall().catch(() => {});
+  }, [phase, sessionId, loadOrders, loadBill, loadServiceCall, handleError]);
 
   // Quay về từ trang VNPay: /t/{token}?payment=12[&vnpay=mã lỗi]
   useEffect(() => {
@@ -212,6 +222,11 @@ export default function Customer() {
               loadBill().catch(() => {});
               if (msg.payment?.status === 'PAID') notify('✅ Đã nhận thanh toán');
               break;
+            case 'SERVICE_CALL_UPDATED':
+              if (msg.call.sessionId !== sessionId) break;
+              setServiceCall(msg.call.handledAt ? null : msg.call);
+              if (msg.call.handledAt) notify('🙋 Nhân viên đã nhận yêu cầu và đang tới bàn bạn');
+              break;
             case 'TABLE_SESSION_ENDED':
               handleEnded();
               break;
@@ -229,11 +244,12 @@ export default function Customer() {
         loadOrders().catch(handleError);
         loadBill().catch(() => {});
         loadMenu().catch(() => {});
+        loadServiceCall().catch(() => {});
       },
     });
     connection.start();
     return () => connection.stop();
-  }, [phase, tableId, token, loadMenu, loadOrders, loadBill, notify, handleEnded, handleError]);
+  }, [phase, tableId, token, sessionId, loadMenu, loadOrders, loadBill, loadServiceCall, notify, handleEnded, handleError]);
 
   // ------------------------------------------------------------------ tên khách
 
@@ -373,6 +389,25 @@ export default function Customer() {
     }
   }
 
+  // ------------------------------------------------------------------ gọi phục vụ
+
+  async function callStaff() {
+    setCalling(true);
+    try {
+      const { data } = await request('POST', '/api/service-calls', {
+        tableToken: token,
+        sessionId,
+        body: { guestName },
+      });
+      setServiceCall(data);
+      notify('🔔 Đã báo quầy lễ tân, nhân viên sẽ tới ngay');
+    } catch (e) {
+      handleError(e);
+    } finally {
+      setCalling(false);
+    }
+  }
+
   // ------------------------------------------------------------------ giao diện
 
   if (fatal) {
@@ -430,7 +465,17 @@ export default function Customer() {
             Bạn là: <strong>{guestName || '…'}</strong> ✏️
           </button>
         </div>
-        <ConnectionBadge status={conn.status} info={conn.info} />
+        <div className="header-actions">
+          <button
+            className={`btn small ${serviceCall ? 'calling' : ''}`}
+            disabled={calling || !!serviceCall}
+            onClick={callStaff}
+            title={serviceCall ? 'Đã báo quầy lễ tân, nhân viên đang tới' : 'Gọi nhân viên tới bàn'}
+          >
+            {serviceCall ? '⏳ Đang gọi…' : '🙋 Gọi phục vụ'}
+          </button>
+          <ConnectionBadge status={conn.status} info={conn.info} />
+        </div>
       </header>
 
       {pending && !submitting && (

@@ -136,3 +136,20 @@ CREATE TABLE IF NOT EXISTS payment (
     FOREIGN KEY (session_id) REFERENCES table_session (id),
     FOREIGN KEY (table_id) REFERENCES restaurant_table (id)
 );
+
+-- Khách bấm "Gọi phục vụ": báo tới quầy lễ tân / thu ngân để điều phối nhân viên.
+-- open_session_id = session_id khi lượt gọi còn mở, NULL khi đã xử lý -> mỗi phiên có tối đa một lượt gọi đang mở
+-- (bấm lặp, nhiều điện thoại cùng bàn bấm cùng lúc đều gộp về một lượt).
+CREATE TABLE IF NOT EXISTS service_call (
+    id              BIGINT AUTO_INCREMENT PRIMARY KEY,
+    session_id      BIGINT       NOT NULL,
+    table_id        BIGINT       NOT NULL,
+    guest_name      VARCHAR(50)  NULL,
+    open_session_id BIGINT       NULL UNIQUE,
+    created_at      BIGINT       NOT NULL,
+    handled_at      BIGINT       NULL,
+    handled_by      VARCHAR(50)  NULL,
+    INDEX idx_service_call_session (session_id),
+    FOREIGN KEY (session_id) REFERENCES table_session (id),
+    FOREIGN KEY (table_id) REFERENCES restaurant_table (id)
+);

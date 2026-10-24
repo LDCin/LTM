@@ -1,5 +1,7 @@
 package com.ltm.qrorder.payment;
 
+import com.ltm.qrorder.servicecall.ServiceCallRepository.ServiceCallDto;
+
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
@@ -63,6 +65,7 @@ public final class PaymentDtos {
      */
     public record CashierTableView(long id, String code, boolean inService, Long sessionId, Long sessionOpenedAt,
                                    String state, long total, long paid, long remaining, long orderCount,
-                                   long activeItemCount, PaymentDto pending, Long lastPaidAt, boolean needsRefund) {
+                                   long activeItemCount, PaymentDto pending, Long lastPaidAt, boolean needsRefund,
+                                   ServiceCallDto serviceCall) {
     }
 }
