@@ -62,10 +62,9 @@ app:
   payment:
     expire-minutes: 15                     # mỗi lần thanh toán hết hạn sau 15 phút
   vnpay:
-    # Thông tin merchant sandbox: CHỈ khai báo bằng biến môi trường, không ghi vào file.
-    # Thiếu tmn-code hoặc hash-secret thì lựa chọn VNPay bị ẩn.
-    tmn-code: ${VNPAY_TMN_CODE:}
-    hash-secret: ${VNPAY_HASH_SECRET:}
+    # Mặc định là khoá sandbox của nhóm; biến môi trường VNPAY_* sẽ ghi đè. Thiếu tmn-code hoặc hash-secret thì lựa chọn VNPay bị ẩn.
+    tmn-code: ${VNPAY_TMN_CODE:FRX0HC52}
+    hash-secret: ${VNPAY_HASH_SECRET:UYUISEBUPUCMDKSNXGUCEYTZRGCPZBZW}
     pay-url: ${VNPAY_PAY_URL:https://sandbox.vnpayment.vn/paymentv2/vpcpay.html}
     api-url: ${VNPAY_API_URL:https://sandbox.vnpayment.vn/merchant_webapi/api/transaction}
     # Địa chỉ công khai (VD https://xxx.ngrok-free.dev) để tạo Return URL; để trống thì lấy theo request
