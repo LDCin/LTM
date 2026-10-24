@@ -310,7 +310,6 @@ function MenuTab({ api }) {
             <th>Giá</th>
             <th>Còn bán</th>
             <th>Tồn kho (trống = không giới hạn)</th>
-            <th>Trạm</th>
             <th />
           </tr>
         </thead>
@@ -337,7 +336,6 @@ function MenuTab({ api }) {
                     style={{ width: 80 }}
                   />
                 </td>
-                <td>{item.station === 'BAR' ? 'Quầy nước' : 'Bếp'}</td>
                 <td>
                   <button className="btn small primary" disabled={!dirty} onClick={() => save(item)}>
                     Lưu
@@ -362,10 +360,6 @@ function MenuTab({ api }) {
         </select>
         <input type="number" placeholder="Giá" value={newItem.price} onChange={(e) => setNewItem({ ...newItem, price: e.target.value })} />
         <input type="number" placeholder="Tồn kho" value={newItem.stock} onChange={(e) => setNewItem({ ...newItem, stock: e.target.value })} />
-        <select value={newItem.station} onChange={(e) => setNewItem({ ...newItem, station: e.target.value })}>
-          <option value="KITCHEN">Bếp</option>
-          <option value="BAR">Quầy nước</option>
-        </select>
         <button className="btn primary" disabled={!newItem.name || !newItem.categoryId} onClick={create}>
           Thêm
         </button>

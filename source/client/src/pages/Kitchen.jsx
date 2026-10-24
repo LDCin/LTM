@@ -55,12 +55,12 @@ function reducer(state, action) {
   }
 }
 
-function column(order) {
-  const active = order.items.filter((i) => !['SERVED', 'CANCELLED'].includes(i.status));
-  if (active.length === 0) return null;
-  if (active.some((i) => i.status === 'PENDING')) return 'new';
-  if (active.some((i) => i.status === 'ACCEPTED' || i.status === 'COOKING')) return 'cooking';
-  return 'ready';
+/** Cột của từng món (không theo cả đơn): một đơn có thể nằm ở nhiều cột, mỗi cột chỉ hiện các món thuộc cột đó. */
+function itemColumn(item) {
+  if (item.status === 'PENDING') return 'new';
+  if (item.status === 'ACCEPTED' || item.status === 'COOKING') return 'cooking';
+  if (item.status === 'READY') return 'ready';
+  return null;
 }
 
 export default function Kitchen() {
@@ -91,7 +91,6 @@ function KitchenBoard({ session, onLogout }) {
   const [conn, setConn] = useState({ status: 'connecting' });
   const [mode, setMode] = useState(null);
   const [stats, setStats] = useState(null);
-  const [station, setStation] = useState('ALL');
   const [toast, setToast] = useState(null);
   const [configChanged, setConfigChanged] = useState(false);
   const [now, setNow] = useState(Date.now());
@@ -171,35 +170,28 @@ function KitchenBoard({ session, onLogout }) {
     }
   }
 
-  const visible = [...orders.values()]
-    .map((o) => ({
-      ...o,
-      items: station === 'ALL' ? o.items : o.items.filter((i) => i.station === station),
-    }))
-    .filter((o) => o.items.length > 0 && column(o))
-    .sort((a, b) => a.createdAt - b.createdAt);
+  const visible = [...orders.values()].sort((a, b) => a.createdAt - b.createdAt);
+
+  // Mỗi cột nhận phần đơn gồm các món đang ở trạng thái của cột; otherCount = số món chưa xong đang ở cột khác
+  const ticketsFor = (key) =>
+    visible
+      .map((o) => {
+        const items = o.items.filter((i) => itemColumn(i) === key);
+        const otherCount = o.items.filter((i) => itemColumn(i) && itemColumn(i) !== key).length;
+        return { ...o, items, otherCount };
+      })
+      .filter((o) => o.items.length > 0);
 
   const columns = [
-    { key: 'new', title: '🆕 Mới', orders: visible.filter((o) => column(o) === 'new') },
-    { key: 'cooking', title: '🔥 Đang làm', orders: visible.filter((o) => column(o) === 'cooking') },
-    { key: 'ready', title: '✅ Sẵn sàng', orders: visible.filter((o) => column(o) === 'ready') },
+    { key: 'new', title: '🆕 Mới', orders: ticketsFor('new') },
+    { key: 'cooking', title: '🔥 Đang làm', orders: ticketsFor('cooking') },
+    { key: 'ready', title: '✅ Sẵn sàng', orders: ticketsFor('ready') },
   ];
 
   return (
     <div className="kitchen">
       <header className="kitchen-header">
         <h1>👨‍🍳 Màn hình bếp</h1>
-        <div className="station-tabs">
-          {[
-            ['ALL', 'Tất cả'],
-            ['KITCHEN', 'Bếp'],
-            ['BAR', 'Quầy nước'],
-          ].map(([key, label]) => (
-            <button key={key} className={station === key ? 'active' : ''} onClick={() => setStation(key)}>
-              {label}
-            </button>
-          ))}
-        </div>
         <div className="kitchen-meta">
           <span className="chip chip-info">Chế độ: {mode || '...'}</span>
           <ConnectionBadge status={conn.status} info={conn.info} />
@@ -270,6 +262,7 @@ function KitchenBoard({ session, onLogout }) {
                       </div>
                     </div>
                   ))}
+                  {o.otherCount > 0 && <div className="ticket-more">+{o.otherCount} món của đơn này ở cột khác</div>}
                   {o.items.filter((i) => i.status === 'PENDING').length > 1 && (
                     <button className="btn small primary block" onClick={() => acceptAll(o)}>
                       Nhận cả đơn

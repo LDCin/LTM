@@ -122,6 +122,7 @@ label { display: flex; flex-direction: column; gap: 6px; font-size: 0.9rem; colo
 .ticket-head .age { margin-left: auto; }
 .ticket.late .age { color: var(--danger); font-weight: 700; }
 .ticket-item { display: flex; justify-content: space-between; gap: 8px; padding: 8px 0; border-top: 1px dashed var(--line); align-items: center; flex-wrap: wrap; }
+.ticket-more { font-size: 12px; color: var(--muted); padding-top: 6px; border-top: 1px dashed var(--line); }
 .ticket-item.status-SERVED, .ticket-item.status-CANCELLED { opacity: 0.45; }
 .ticket-item-name { flex: 1; min-width: 140px; }
 .ticket-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
