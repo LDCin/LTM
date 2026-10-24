@@ -111,7 +111,6 @@ label { display: flex; flex-direction: column; gap: 6px; font-size: 0.9rem; colo
 .station-tabs { display: flex; gap: 6px; }
 .station-tabs button { font: inherit; background: transparent; color: #f1efe9; border: 1px solid #55524c; padding: 6px 14px; border-radius: 8px; cursor: pointer; }
 .station-tabs button.active { background: var(--primary); border-color: var(--primary); }
-.feed-stats { display: flex; flex-wrap: wrap; gap: 16px; padding: 8px 20px; font-size: 0.8rem; color: #bdb8ad; background: #262523; font-family: ui-monospace, Consolas, monospace; }
 .board { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; padding: 16px 20px; }
 .board-col h2 { color: #f1efe9; }
 .board-col .count { background: #444; padding: 2px 10px; border-radius: 999px; font-size: 0.85rem; }

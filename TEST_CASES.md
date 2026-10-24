@@ -89,7 +89,7 @@ Có hai cách làm "mất mạng":
 | 41 | **Khách mất mạng khi đang chờ món** | Điện thoại bật chế độ máy bay 10–20 s; trong lúc đó bếp đổi trạng thái món; tắt chế độ máy bay | Trang tự kết nối lại và hiện đúng trạng thái mới | |
 | 42 | **Khách mất mạng lúc bấm Thanh toán** | Bật chế độ máy bay, bấm **Thanh toán → Tiền mặt**; tắt chế độ máy bay, bấm lại | Chỉ có **1** lần thanh toán chờ | |
 | 43 | **Khách mất mạng trong lúc thu ngân xác nhận / trả bàn** | Bật chế độ máy bay; thu ngân bấm **Đã nhận tiền** (hoặc **Trả bàn**); tắt chế độ máy bay | Trang tự kết nối lại và hiện đúng "Đã thanh toán" (hoặc "Cảm ơn quý khách") | |
-| 44 | **Bếp mất mạng trong lúc khách đặt đơn** | Bếp bấm **Giả lập mất mạng 5s** (hoặc tắt Wi-Fi máy bếp 10 s); trong lúc đó khách đặt 1–2 đơn | **Các đơn đặt trong lúc mất mạng vẫn hiện ở bếp**; thanh thống kê có "Gửi bù" | |
+| 44 | **Bếp mất mạng trong lúc khách đặt đơn** | Bếp bấm **Giả lập mất mạng 5s** (hoặc tắt Wi-Fi máy bếp 10 s); trong lúc đó khách đặt 1–2 đơn | **Các đơn đặt trong lúc mất mạng vẫn hiện ở bếp** (F12 → Network → WS thấy `REPLAY_BATCH` chứa các đơn đó) | |
 | 45 | **Bếp mất mạng lâu** | Tắt Wi-Fi máy bếp 1–2 phút, khách đặt nhiều đơn; bật lại Wi-Fi | Bếp nhận đủ mọi đơn, không thiếu, không trùng | |
 | 46 | **Thu ngân mất mạng** | Tắt Wi-Fi máy thu ngân 20 s, trong lúc đó khách bấm Thanh toán; bật lại | Sơ đồ bàn tự cập nhật đúng sau khi kết nối lại | |
 | 47 | **Server tắt rồi bật lại** | Tắt server 10–20 s rồi chạy lại | Khách, bếp, thu ngân tự kết nối lại; dữ liệu vẫn còn (MySQL) | |

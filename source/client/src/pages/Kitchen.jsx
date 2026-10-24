@@ -94,7 +94,6 @@ function KitchenBoard({ session, onLogout }) {
   const [orders, dispatch] = useReducer(reducer, new Map());
   const [conn, setConn] = useState({ status: 'connecting' });
   const [mode, setMode] = useState(null);
-  const [stats, setStats] = useState(null);
   const [toast, setToast] = useState(null);
   const [configChanged, setConfigChanged] = useState(false);
   const [voiding, setVoiding] = useState(null); // { item, order, returned } đang mở hộp thoại huỷ / trả lại
@@ -139,14 +138,11 @@ function KitchenBoard({ session, onLogout }) {
         else setConn({ status: 'error', info: { message: e.message } });
       }
     })();
-    const statsTimer = setInterval(() => {
-      const f = feedRef.current;
-      if (f) setStats({ ...f.stats, watermark: f.watermark, transport: f.transportStats && { ...f.transportStats } });
-      setNow(Date.now());
-    }, 1000);
+    // Cập nhật số phút chờ trên thẻ món
+    const clock = setInterval(() => setNow(Date.now()), 30_000);
     return () => {
       cancelled = true;
-      clearInterval(statsTimer);
+      clearInterval(clock);
       feed?.stop();
     };
   }, [token, loadSnapshot, onLogout]);
@@ -241,19 +237,6 @@ function KitchenBoard({ session, onLogout }) {
           <button className="btn small primary" onClick={() => window.location.reload()}>
             Tải lại
           </button>
-        </div>
-      )}
-
-      {stats && (
-        <div className="feed-stats">
-          <span>Đã nhận: {stats.received}</span>
-          <span>Watermark seq: {stats.watermark}</span>
-          <span>Trùng bị loại: {stats.duplicates}</span>
-          <span>Phát hiện thiếu: {stats.gaps}</span>
-          <span>RESUME: {stats.resumes}</span>
-          <span>Gửi bù: {stats.replayed}</span>
-          {mode === 'POLLING' && <span>Số lần poll: {stats.polls}</span>}
-          {stats.transport && <span>Nhận: {(stats.transport.bytesIn / 1024).toFixed(1)} KB</span>}
         </div>
       )}
 

@@ -367,7 +367,7 @@ Làm theo thứ tự, vừa làm vừa nói ngắn.
 | 2 | Chỉ màn hình bếp: đơn hiện ngay | "Server đẩy xuống bếp qua WebSocket, không cần tải lại" |
 | 3 | Bếp bấm **Nhận** → **Bắt đầu nấu** → **Xong** | "Điện thoại khách cập nhật theo từng bước" |
 | 4 | ⭐ Bếp bấm **Giả lập mất mạng 5s**, trong 5 giây đó điện thoại đặt thêm một đơn | "Bếp đang mất mạng, đơn vẫn được đặt" |
-| 5 | Chờ bếp kết nối lại, chỉ đơn vừa đặt và ô **Gửi bù** | "Bếp kết nối lại, gửi RESUME, server gửi bù đơn bị lỡ, không mất đơn" |
+| 5 | Chờ bếp kết nối lại, chỉ đơn vừa đặt; mở F12 → Network → WS, chỉ frame `/app/resume` và `REPLAY_BATCH` | "Bếp kết nối lại, gửi RESUME, server gửi bù đơn bị lỡ, không mất đơn" |
 | 6 | Điện thoại bật chế độ máy bay, bấm **Đặt món**; tắt chế độ máy bay, bấm **Gửi lại** | "Khách mất mạng khi đặt, gửi lại vẫn chỉ có một đơn nhờ Idempotency-Key" |
 | 7 | Hai tab bếp cùng bấm **Nhận** một món | "Một bên thành công, bên kia nhận 409, không ghi đè" |
 | 8 | Điện thoại thứ hai quét QR cùng bàn, nhập tên khác, đặt một món | "Hai máy cùng một phiên bàn: máy kia thấy ngay đơn mới, có tên người đặt, chỉ máy đặt mới huỷ được" |

@@ -84,7 +84,7 @@ Mọi điện thoại trong cùng phiên thấy **đơn chung** của bàn; ch�
 | 6 | Khách đặt đơn mới rồi bấm **Huỷ đơn** khi bếp chưa nhận | Đơn chuyển "Đã huỷ", biến mất khỏi bếp |
 | 7 | Bếp nhận một món, rồi khách thử huỷ đơn đó | Nút Huỷ đã biến mất (bếp nhận rồi thì không huỷ được) |
 | 8 | **Đơn chung:** mở **cùng link** bằng `http://127.0.0.1:8080/t/...` (hoặc điện thoại khác / cửa sổ ẩn danh, coi như máy thứ hai), nhập tên "Lan"; rồi máy "Lan" đặt một món | Máy "Lan" vào **cùng phiên**: thấy ngay các đơn của "Minh" (ghi tên "Minh", **không** có nút Huỷ). Đơn của "Lan" hiện ngay trên máy "Minh"; mục **Tổng cả bàn** cộng dồn đúng |
-| 9 | **Tính năng chính:** ở tab Bếp bấm **Giả lập mất mạng 5s**, trong 5 giây đó khách đặt một đơn | Badge bếp chuyển "Mất mạng" rồi "Đang kết nối lại"; khi xanh lại, đơn vẫn hiện; thanh thống kê có **Gửi bù: 1** |
+| 9 | **Tính năng chính:** ở tab Bếp bấm **Giả lập mất mạng 5s**, trong 5 giây đó khách đặt một đơn | Badge bếp chuyển "Mất mạng" rồi "Đang kết nối lại"; khi xanh lại, đơn vẫn hiện; F12 → Network → WS thấy frame `/app/resume` và `REPLAY_BATCH` chứa đơn đó |
 | 10 | Admin → **Cấu hình thực nghiệm** → chọn `NAIVE_PUSH`; tải lại tab Bếp; lặp lại bước 9 | Lần này đơn **không** hiện ở bếp (baseline bị mất đơn). Xong nhớ chọn lại `RELIABLE_PUSH` và tải lại bếp |
 | 11 | Admin → chọn `POLLING`; tải lại Bếp; khách đặt món | Badge bếp hiện "Polling"; đơn hiện chậm 0–3 giây. Chọn lại `RELIABLE_PUSH` |
 | 12 | Mở 2 tab Bếp, cùng bấm **Nhận** một món gần như cùng lúc | Một tab thành công, tab kia báo "Món vừa được người khác cập nhật" |

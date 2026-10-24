@@ -723,7 +723,7 @@ source/
 
 Ngoài JUnit, bộ kiểm thử end-to-end `source/loadtest/e2e-test.js` chạy trên máy chủ thật, gồm 18 nhóm; nhóm 15 kiểm tra phiên bàn nhiều điện thoại (đơn chung, tên khách, trả bàn), nhóm 16 kiểm tra thanh toán và quầy thu ngân (gồm phân quyền `/api/cashier` và `/topic/cashier`, IPN VNPay giả lập), nhóm 17 kiểm tra gọi phục vụ (gộp lượt gọi trùng, thông báo real-time tới quầy và tới điện thoại khách), nhóm 18 kiểm tra bếp huỷ / khách trả lại món đã nhận (huỷ một phần, hai máy bếp cùng huỷ chỉ một thành công, tiền cần trả lại khách). Lần chạy ngày 25/10/2026 trên cơ sở dữ liệu H2: `KẾT QUẢ: 205 đạt, 0 lỗi`.
 
-Kiểm thử thủ công khả năng chịu lỗi: trên màn hình bếp bấm "Giả lập mất mạng 5s" trong khi đặt món từ điện thoại; sau khi kết nối lại, bếp tự RESUME và thanh thống kê hiển thị số sự kiện "Gửi bù". Các ca test tay về đơn chung, thanh toán, trả bàn và VNPay (thẻ test NCB qua tunnel) nằm trong `TEST_CASES.md`. [CẦN ĐIỀN: ảnh chụp màn hình demo]
+Kiểm thử thủ công khả năng chịu lỗi: trên màn hình bếp bấm "Giả lập mất mạng 5s" trong khi đặt món từ điện thoại; sau khi kết nối lại, bếp tự gửi `/app/resume` và nhận `REPLAY_BATCH` chứa các đơn bị lỡ (quan sát bằng công cụ F12 → Network → WS của trình duyệt). Các ca test tay về đơn chung, thanh toán, trả bàn và VNPay (thẻ test NCB qua tunnel) nằm trong `TEST_CASES.md`. [CẦN ĐIỀN: ảnh chụp màn hình demo]
 
 ---
 
