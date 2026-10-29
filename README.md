@@ -1,6 +1,6 @@
 # QR Order – Hệ thống gọi món qua mã QR
 
-Đồ án môn **Lập trình mạng**, xây dựng ứng dụng web hỗ trợ khách hàng quét mã QR tại bàn để xem thực đơn, đặt món và theo dõi trạng thái đơn. Hệ thống cung cấp màn hình bếp thời gian thực, trang thu ngân và trang quản trị nhà hàng.
+Bài tập lớn môn **Lập trình mạng**, xây dựng ứng dụng web hỗ trợ khách hàng quét mã QR tại bàn để xem thực đơn, đặt món và theo dõi trạng thái đơn. Hệ thống cung cấp màn hình bếp thời gian thực, trang thu ngân và trang quản trị nhà hàng.
 
 Khách hàng và nhân viên sử dụng hệ thống ngay trên trình duyệt. Các thay đổi về đơn hàng và trạng thái món được cập nhật qua WebSocket/STOMP.
 
