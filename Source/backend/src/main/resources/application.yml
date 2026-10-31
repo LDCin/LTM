@@ -1,0 +1,87 @@
+server:
+  port: 8080
+  tomcat:
+    # Tomcat dùng NIO connector: một kết nối (kể cả WebSocket) đang rảnh KHÔNG chiếm thread.
+    threads:
+      max: 200          # số thread tối đa xử lý request đồng thời
+      min-spare: 10
+    max-connections: 2000   # tổng số kết nối TCP tối đa server giữ cùng lúc
+    accept-count: 100       # hàng đợi kết nối chờ khi đã đủ max-connections
+    connection-timeout: 10s
+
+spring:
+  application:
+    name: qrorder-server
+  datasource:
+    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:qrorder}?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&characterEncoding=UTF-8
+    username: ${DB_USER:root}
+    password: ${DB_PASSWORD:root}
+    hikari:
+      maximum-pool-size: 20     # giới hạn kết nối DB -> bảo vệ MySQL khi tải cao
+      minimum-idle: 5
+      connection-timeout: 3000  # hết connection trong 3s -> trả 503 thay vì treo request
+  jdbc:
+    template:
+      query-timeout: 3s
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema.sql
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics
+
+app:
+  # POLLING | NAIVE_PUSH | RELIABLE_PUSH  (đổi lúc chạy qua PUT /api/admin/settings)
+  delivery-mode: RELIABLE_PUSH
+  idempotency-enabled: true
+  optimistic-lock-enabled: true
+  polling-interval-ms: 3000
+  auth-secret: ${AUTH_SECRET:ltm-qrorder-demo-secret-change-me}
+  auth-token-ttl-ms: 43200000
+  rate-limit:
+    enabled: true
+    trust-forwarded-for: false   # chỉ bật khi chạy thực nghiệm giả lập nhiều IP
+    order-capacity: 10           # mỗi bàn (tính chung mọi điện thoại) đặt tối đa 10 đơn liên tiếp...
+    order-refill-per-minute: 10  # ...và hồi 10 đơn mỗi phút
+    api-capacity: 60             # mỗi IP: burst 60 request...
+    api-refill-per-second: 20    # ...hồi 20 request/giây
+  ws:
+    heartbeat-ms: 10000
+    max-connections-per-table: 8
+    send-time-limit-ms: 10000
+    send-buffer-size-limit: 524288
+    message-size-limit: 65536
+    replay-batch-limit: 500
+  session:
+    idle-timeout-minutes: 30               # phiên mở mà chưa có đơn nào quá 30 phút -> tự kết thúc
+    auto-checkout-after-paid-minutes: 30   # đã trả đủ tiền, 30 phút chưa ai bấm "Trả bàn" -> tự trả bàn
+    order-pending-timeout-minutes: 20      # món chờ bếp tiếp nhận quá 20 phút -> tự huỷ
+    service-call-timeout-minutes: 10       # lượt gọi phục vụ chưa ai xử lý quá 10 phút -> tự đóng
+    inactive-timeout-minutes: 180          # phiên có đơn nhưng 3 giờ không hoạt động, không chờ thanh toán -> tự kết thúc
+  payment:
+    expire-minutes: 15                     # mỗi lần thanh toán hết hạn sau 15 phút
+  vnpay:
+    # Mặc định là khoá sandbox của nhóm; biến môi trường VNPAY_* sẽ ghi đè. Thiếu tmn-code hoặc hash-secret thì lựa chọn VNPay bị ẩn.
+    tmn-code: ${VNPAY_TMN_CODE:FRX0HC52}
+    hash-secret: ${VNPAY_HASH_SECRET:UYUISEBUPUCMDKSNXGUCEYTZRGCPZBZW}
+    pay-url: ${VNPAY_PAY_URL:https://sandbox.vnpayment.vn/paymentv2/vpcpay.html}
+    api-url: ${VNPAY_API_URL:https://sandbox.vnpayment.vn/merchant_webapi/api/transaction}
+    # Địa chỉ công khai (VD https://xxx.ngrok-free.dev) để tạo Return URL; để trống thì lấy theo request
+    public-url: ${APP_PUBLIC_URL:}
+  assistant:
+    # Trợ lý gợi ý món: khoá Gemini API (Google AI Studio, hạng miễn phí). Trống thì chỉ dùng gợi ý dự phòng.
+    gemini-api-key: ${GEMINI_API_KEY:}
+    gemini-model: ${GEMINI_MODEL:gemini-flash-lite-latest}
+    timeout-ms: 15000
+    per-table-capacity: 5            # mỗi bàn hỏi tối đa 5 câu liên tiếp...
+    per-table-refill-per-minute: 6   # ...hồi 6 câu mỗi phút (hạng free của Gemini giới hạn số request/phút)
+    cooldown-seconds: 60             # Gemini báo hết lượt (429) hoặc lỗi liên tiếp -> ngừng gọi 60 s, dùng gợi ý dự phòng
+    failure-threshold: 3
+
+logging:
+  level:
+    com.ltm.qrorder: INFO

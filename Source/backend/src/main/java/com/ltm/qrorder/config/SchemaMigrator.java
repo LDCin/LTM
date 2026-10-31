@@ -1,0 +1,75 @@
+package com.ltm.qrorder.config;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.boot.CommandLineRunner;
+import org.springframework.core.annotation.Order;
+import org.springframework.dao.DataAccessException;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Component;
+
+/**
+ * Nâng cấp schema cho database đã tạo từ phiên bản trước.
+ * schema.sql chỉ dùng CREATE TABLE IF NOT EXISTS nên không tự thêm cột mới vào bảng đã có;
+ * MySQL 8 lại không hỗ trợ "ADD COLUMN IF NOT EXISTS" -> kiểm tra cột rồi mới ALTER.
+ * Chạy trước DataSeeder.
+ */
+@Component
+@Order(0)
+public class SchemaMigrator implements CommandLineRunner {
+
+    private static final Logger log = LoggerFactory.getLogger(SchemaMigrator.class);
+
+    private final JdbcTemplate jdbc;
+
+    public SchemaMigrator(JdbcTemplate jdbc) {
+        this.jdbc = jdbc;
+    }
+
+    @Override
+    public void run(String... args) {
+        if (!columnExists("orders", "device_id")) {
+            log.info("Nâng cấp schema: thêm cột orders.device_id");
+            jdbc.execute("ALTER TABLE orders ADD COLUMN device_id VARCHAR(64) NULL");
+            jdbc.execute("CREATE INDEX idx_orders_session_device ON orders (session_id, device_id)");
+        }
+        if (!columnExists("orders", "guest_name")) {
+            log.info("Nâng cấp schema: thêm cột orders.guest_name");
+            jdbc.execute("ALTER TABLE orders ADD COLUMN guest_name VARCHAR(30) NULL");
+        }
+        if (!columnExists("table_session", "end_reason")) {
+            log.info("Nâng cấp schema: phiên bàn tự động (end_reason, end_note, ended_by)");
+            jdbc.execute("ALTER TABLE table_session ADD COLUMN end_reason VARCHAR(30) NULL");
+            jdbc.execute("ALTER TABLE table_session ADD COLUMN end_note VARCHAR(200) NULL");
+            jdbc.execute("ALTER TABLE table_session ADD COLUMN ended_by VARCHAR(50) NULL");
+            // Trước đây CLOSED nghĩa là "chưa có phiên"; nay CLOSED nghĩa là "ngừng phục vụ".
+            // Mọi bàn cũ đều đang phục vụ, phiên vẫn giữ nguyên trong current_session_id.
+            jdbc.update("UPDATE restaurant_table SET status = 'OPEN'");
+        }
+        if (!columnExists("order_item", "cancel_reason")) {
+            log.info("Nâng cấp schema: lý do huỷ / trả lại món (cancel_reason, cancel_note, cancelled_by)");
+            jdbc.execute("ALTER TABLE order_item ADD COLUMN cancel_reason VARCHAR(20) NULL");
+            jdbc.execute("ALTER TABLE order_item ADD COLUMN cancel_note VARCHAR(200) NULL");
+            jdbc.execute("ALTER TABLE order_item ADD COLUMN cancelled_by VARCHAR(50) NULL");
+        }
+        if (!columnExists("menu_item", "vat_rate")) {
+            log.info("Nâng cấp schema: thuế VAT theo món (menu_item.vat_rate, order_item.vat_rate)");
+            jdbc.execute("ALTER TABLE menu_item ADD COLUMN vat_rate INT NOT NULL DEFAULT 8");
+            jdbc.execute("ALTER TABLE order_item ADD COLUMN vat_rate INT NOT NULL DEFAULT 0");
+        }
+        // Trạng thái món rút gọn còn: chưa tiếp nhận / đã tiếp nhận / đã phục vụ
+        int merged = jdbc.update("UPDATE order_item SET status = 'ACCEPTED' WHERE status IN ('COOKING', 'READY')");
+        if (merged > 0) {
+            log.info("Nâng cấp dữ liệu: {} món COOKING/READY chuyển về ACCEPTED", merged);
+        }
+    }
+
+    private boolean columnExists(String table, String column) {
+        try {
+            jdbc.queryForList("SELECT " + column + " FROM " + table + " WHERE 1 = 0");
+            return true;
+        } catch (DataAccessException e) {
+            return false;
+        }
+    }
+}
