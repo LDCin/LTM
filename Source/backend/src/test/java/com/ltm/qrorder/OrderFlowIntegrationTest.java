@@ -477,11 +477,18 @@ class OrderFlowIntegrationTest {
 
         ResponseEntity<JsonNode> checkout = http.postForEntity("/api/cashier/tables/" + tableId + "/checkout",
                 json("{}", cashier), JsonNode.class);
-        assertEquals(409, checkout.getStatusCode().value(), "còn món chưa phục vụ -> cần lý do");
-        assertEquals("CONFIRM_REQUIRED", checkout.getBody().get("error").asText());
+        assertEquals(409, checkout.getStatusCode().value(), "bếp còn món chưa phục vụ -> chưa trả bàn được");
+        assertEquals("ITEMS_IN_KITCHEN", checkout.getBody().get("error").asText());
         ResponseEntity<JsonNode> forced = http.postForEntity("/api/cashier/tables/" + tableId + "/checkout",
                 json("{\"reason\":\"OTHER\",\"note\":\"test\"}", cashier), JsonNode.class);
-        assertEquals("EMPTY", forced.getBody().get("state").asText());
+        assertEquals("ITEMS_IN_KITCHEN", forced.getBody().get("error").asText(), "có lý do cũng không bỏ qua món ở bếp");
+
+        long itemId = tableOrders(token, devA, session).get("orders").get(0).get("items").get(0).get("id").asLong();
+        assertEquals(200, updateStatus(itemId, "ACCEPTED", 0).getStatusCode().value());
+        assertEquals(200, updateStatus(itemId, "SERVED", 1).getStatusCode().value());
+        ResponseEntity<JsonNode> done = http.postForEntity("/api/cashier/tables/" + tableId + "/checkout",
+                json("{}", cashier), JsonNode.class);
+        assertEquals("EMPTY", done.getBody().get("state").asText(), "đã trả đủ, món đã phục vụ hết -> trả bàn được");
     }
 
     // ================================================================ VNPay (khoá giả của test)

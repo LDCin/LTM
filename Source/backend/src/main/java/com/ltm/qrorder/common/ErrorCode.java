@@ -14,6 +14,7 @@ public enum ErrorCode {
     SESSION_ENDED(HttpStatus.CONFLICT),             // lượt khách của máy này đã kết thúc (đã trả bàn)
     PAYMENT_IN_PROGRESS(HttpStatus.CONFLICT),       // bàn đang thanh toán, chưa gọi thêm được
     CONFIRM_REQUIRED(HttpStatus.CONFLICT),          // thao tác cần xác nhận thêm (VD trả bàn khi chưa trả đủ tiền)
+    ITEMS_IN_KITCHEN(HttpStatus.CONFLICT),          // trả bàn khi bếp còn món chưa phục vụ / chưa huỷ
     NOTHING_TO_PAY(HttpStatus.UNPROCESSABLE_ENTITY),
     PAYMENT_METHOD_UNAVAILABLE(HttpStatus.UNPROCESSABLE_ENTITY),
     PAYMENT_PROVIDER_ERROR(HttpStatus.BAD_GATEWAY),

@@ -21,7 +21,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -31,7 +30,7 @@ import java.util.Map;
  *  - đã trả đúng đủ tiền (không thừa: thừa thì chờ thu ngân trả lại khách), món đã phục vụ hết, quá auto-checkout-after-paid mà chưa ai bấm "Trả bàn" -> tự trả bàn;
  *  - lần thanh toán quá hạn -> hỏi lại VNPay rồi EXPIRED;
  *  - món chờ bếp tiếp nhận quá hạn -> tự huỷ; lượt gọi phục vụ quá hạn -> tự đóng;
- *  - phiên có đơn nhưng quá lâu không hoạt động (không chờ thanh toán) -> tự kết thúc (AUTO_IDLE).
+ *  - phiên có đơn nhưng quá lâu không hoạt động (không chờ thanh toán, bếp không còn món) -> tự kết thúc (AUTO_IDLE).
  */
 @Service
 public class CashierService {
@@ -104,7 +103,9 @@ public class CashierService {
     /**
      * "Trả bàn": kết thúc phiên, bàn về trống.
      * - Đang có lần thanh toán chờ -> 409 PAYMENT_IN_PROGRESS (xác nhận hoặc huỷ trước).
-     * - Còn tiền chưa trả hoặc còn món chưa phục vụ mà lý do là CHECKOUT (hoặc không có lý do)
+     * - Bếp còn món chưa phục vụ / chưa huỷ -> 409 ITEMS_IN_KITCHEN, kể cả khi có lý do: phục vụ hoặc huỷ món trước,
+     *   để bếp không còn món của lượt khách đã đi.
+     * - Còn tiền chưa trả mà lý do là CHECKOUT (hoặc không có lý do)
      *   -> 409 CONFIRM_REQUIRED kèm số liệu; client hỏi lý do (khách bỏ về / mời khách / khác) rồi gửi lại.
      */
     public CashierTableView checkout(long tableId, CheckoutRequest req, StaffPrincipal staff) {
@@ -117,20 +118,22 @@ public class CashierService {
             throw new ApiException(ErrorCode.PAYMENT_IN_PROGRESS,
                     "Bàn " + t.code() + " đang có lần thanh toán chờ, hãy xác nhận hoặc huỷ trước khi trả bàn");
         }
+        if (v.activeItemCount() > 0) {
+            throw new ApiException(ErrorCode.ITEMS_IN_KITCHEN,
+                    "Bàn " + t.code() + " còn " + v.activeItemCount() + " món ở bếp chưa phục vụ."
+                            + " Bếp cần phục vụ hoặc huỷ các món này trước khi trả bàn",
+                    Map.of("activeItemCount", v.activeItemCount()));
+        }
         if (v.refundDue() > 0 && (req == null || !Boolean.TRUE.equals(req.refundReturned()))) {
             throw new ApiException(ErrorCode.CONFIRM_REQUIRED,
                     "Bàn " + t.code() + " cần trả lại khách " + v.refundDue() + "đ (món bị huỷ sau khi đã thanh toán)."
                             + " Xác nhận đã trả lại tiền để trả bàn", Map.of("refundDue", v.refundDue()));
         }
         CheckoutReason reason = req == null || req.reason() == null ? CheckoutReason.CHECKOUT : req.reason();
-        if (reason == CheckoutReason.CHECKOUT && (v.remaining() > 0 || v.activeItemCount() > 0)) {
-            Map<String, Object> details = new LinkedHashMap<>();
-            details.put("remaining", v.remaining());
-            details.put("activeItemCount", v.activeItemCount());
+        if (reason == CheckoutReason.CHECKOUT && v.remaining() > 0) {
             throw new ApiException(ErrorCode.CONFIRM_REQUIRED,
-                    "Bàn " + t.code() + (v.remaining() > 0 ? " còn " + v.remaining() + "đ chưa thanh toán" : "")
-                            + (v.activeItemCount() > 0 ? " còn " + v.activeItemCount() + " món chưa phục vụ" : "")
-                            + ". Chọn lý do để vẫn trả bàn", details);
+                    "Bàn " + t.code() + " còn " + v.remaining() + "đ chưa thanh toán. Chọn lý do để vẫn trả bàn",
+                    Map.of("remaining", v.remaining()));
         }
         String note = req == null ? null : req.note();
         if (v.refundDue() > 0) {
@@ -186,7 +189,8 @@ public class CashierService {
                     ok = tables.endSession(tableId, sessionId, "AUTO_AFTER_PAID", "Tự trả bàn sau khi thanh toán", "system");
                 }
                 Long last = orders.lastActivityAt(sessionId);
-                if (!ok && last != null && now - Math.max(last, lastPaid == null ? 0 : lastPaid) > inactiveMs) {
+                if (!ok && last != null && now - Math.max(last, lastPaid == null ? 0 : lastPaid) > inactiveMs
+                        && orders.countActiveItemsInSession(sessionId) == 0) {
                     ok = tables.endSession(tableId, sessionId, "AUTO_IDLE", "Quá lâu không hoạt động", "system");
                 }
             }
