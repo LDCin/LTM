@@ -36,6 +36,7 @@ export default function AssistantChat({ token, sessionId, itemsById, canOrder, o
         tableToken: token,
         sessionId,
         body: { messages: history.slice(-10).map(({ role, text: t }) => ({ role, text: t })) },
+        timeoutMs: 20000, // server chờ Gemini tới 15 s (app.assistant.timeout-ms) rồi mới trả gợi ý dự phòng
       });
       setMessages((m) => [...m, { role: 'bot', text: data.reply, suggestions: data.suggestions, source: data.source, notice: data.notice }]);
     } catch (e) {
