@@ -226,6 +226,7 @@ Các cấu hình sau không bắt buộc để chạy luồng gọi món và tha
 | --- | --- |
 | `GEMINI_API_KEY` | Khóa Gemini của bạn cho trợ lý AI; khi chưa có khóa, trợ lý dùng gợi ý dự phòng |
 | `GEMINI_MODEL` | Model Gemini sử dụng, nếu cần thay giá trị mặc định |
+| `GEMINI_FALLBACK_MODELS` | Danh sách model dự phòng, phân cách bằng dấu phẩy; tự thử khi model chính quá tải, hết lượt hoặc không tồn tại |
 | `VNPAY_TMN_CODE`, `VNPAY_HASH_SECRET` | Thông tin merchant VNPay sandbox của bạn, ghi đè cấu hình demo có sẵn |
 | `APP_PUBLIC_URL` | Địa chỉ HTTPS công khai của backend khi thử luồng VNPay qua tunnel; không dùng URL frontend Vite |
 | `AUTH_SECRET` | Khóa ký token nhân viên, ghi đè giá trị demo khi cần |

@@ -2,6 +2,10 @@ package com.ltm.qrorder.config;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+
 /**
  * Cấu hình ứng dụng (prefix "app" trong application.yml).
  * Các trường volatile có thể đổi lúc chạy qua PUT /api/admin/settings để chạy thực nghiệm
@@ -77,7 +81,10 @@ public class AppProperties {
     public static class Assistant {
         private String geminiApiKey = "";
         private String geminiModel = "gemini-flash-lite-latest";
+        /** Thử lần lượt khi model chính quá tải / hết lượt / không tồn tại. */
+        private List<String> geminiFallbackModels = new ArrayList<>();
         private String geminiUrl = "https://generativelanguage.googleapis.com/v1beta/models";
+        /** Tổng thời gian chờ cho mọi model của một câu hỏi (phải nhỏ hơn timeout 20 s phía trình duyệt). */
         private int timeoutMs = 15000;
         /** Mỗi bàn: tối đa perTableCapacity câu hỏi liên tiếp, hồi perTableRefillPerMinute câu mỗi phút. */
         private int perTableCapacity = 5;
@@ -97,6 +104,20 @@ public class AppProperties {
         public void setGeminiApiKey(String geminiApiKey) { this.geminiApiKey = geminiApiKey; }
         public String getGeminiModel() { return geminiModel; }
         public void setGeminiModel(String geminiModel) { this.geminiModel = geminiModel; }
+        public List<String> getGeminiFallbackModels() { return geminiFallbackModels; }
+        public void setGeminiFallbackModels(List<String> v) { this.geminiFallbackModels = v; }
+
+        /** Model chính rồi tới các model dự phòng, bỏ trống và trùng. */
+        public List<String> models() {
+            LinkedHashSet<String> all = new LinkedHashSet<>();
+            all.add(geminiModel.trim());
+            for (String m : geminiFallbackModels) {
+                if (m != null && !m.isBlank()) {
+                    all.add(m.trim());
+                }
+            }
+            return List.copyOf(all);
+        }
         public String getGeminiUrl() { return geminiUrl; }
         public void setGeminiUrl(String geminiUrl) { this.geminiUrl = geminiUrl; }
         public int getTimeoutMs() { return timeoutMs; }

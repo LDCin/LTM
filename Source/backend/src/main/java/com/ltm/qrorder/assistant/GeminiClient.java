@@ -47,6 +47,11 @@ public class GeminiClient implements LlmClient {
         return props.getAssistant().isConfigured();
     }
 
+    /**
+     * Thử model chính rồi lần lượt các model dự phòng khi model trước quá tải (503, timeout), hết lượt (429)
+     * hoặc không tồn tại (404). Mọi lần thử chia chung timeoutMs. Lỗi 400/401/403 (khoá hoặc request sai) dừng ngay
+     * vì đổi model cũng không khỏi.
+     */
     @Override
     public String generate(String systemPrompt, List<ChatMessage> messages) throws LlmUnavailableException {
         AppProperties.Assistant cfg = props.getAssistant();
@@ -56,9 +61,49 @@ public class GeminiClient implements LlmClient {
         } catch (IOException e) {
             throw new IllegalStateException(e);
         }
+        List<String> models = cfg.models();
+        long deadline = System.currentTimeMillis() + cfg.getTimeoutMs();
+        LlmUnavailableException last = null;
+        boolean allRateLimited = true;
+        long retryAfter = 0;
+        for (int i = 0; i < models.size(); i++) {
+            long remaining = deadline - System.currentTimeMillis();
+            if (remaining <= 0) {
+                break;
+            }
+            String model = models.get(i);
+            try {
+                return attempt(cfg, model, body, remaining / (models.size() - i));
+            } catch (StopException e) {
+                throw e;
+            } catch (LlmUnavailableException e) {
+                last = e;
+                allRateLimited &= e.isRateLimited();
+                retryAfter = Math.max(retryAfter, e.getRetryAfterSeconds());
+                if (i + 1 < models.size()) {
+                    log.info("Model {} lỗi ({}), thử model {}", model, e.getMessage(), models.get(i + 1));
+                }
+            }
+        }
+        if (last == null) {
+            throw new LlmUnavailableException("Gemini quá thời gian chờ", false, 0);
+        }
+        // Chỉ coi là hết lượt khi mọi model đều báo 429, để bên gọi tạm ngừng theo retryAfter
+        throw allRateLimited ? new LlmUnavailableException(last.getMessage(), true, retryAfter) : last;
+    }
+
+    /** Lỗi không nên thử model khác (khoá sai, request sai). */
+    static final class StopException extends LlmUnavailableException {
+        StopException(String message) {
+            super(message, false, 0);
+        }
+    }
+
+    private String attempt(AppProperties.Assistant cfg, String model, String body, long timeoutMs)
+            throws LlmUnavailableException {
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(cfg.getGeminiUrl() + "/" + cfg.getGeminiModel() + ":generateContent"))
-                .timeout(Duration.ofMillis(cfg.getTimeoutMs()))
+                .uri(URI.create(cfg.getGeminiUrl() + "/" + model + ":generateContent"))
+                .timeout(Duration.ofMillis(Math.max(1, timeoutMs)))
                 .header("Content-Type", "application/json")
                 .header("x-goog-api-key", cfg.getGeminiApiKey())
                 .POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8))
@@ -72,7 +117,7 @@ public class GeminiClient implements LlmClient {
             throw new LlmUnavailableException("Không kết nối được Gemini: " + e.getMessage(), false, 0);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new LlmUnavailableException("Bị ngắt khi gọi Gemini", false, 0);
+            throw new StopException("Bị ngắt khi gọi Gemini");
         }
 
         if (res.statusCode() == 429) {
@@ -80,8 +125,10 @@ public class GeminiClient implements LlmClient {
         }
         if (res.statusCode() != 200) {
             // Không ghi nguyên thân lỗi: có thể dài; chỉ cần mã trạng thái để chẩn đoán
-            log.warn("Gemini trả HTTP {}", res.statusCode());
-            throw new LlmUnavailableException("Gemini trả HTTP " + res.statusCode(), false, 0);
+            log.warn("Gemini ({}) trả HTTP {}", model, res.statusCode());
+            String message = "Gemini trả HTTP " + res.statusCode();
+            int s = res.statusCode();
+            throw s == 400 || s == 401 || s == 403 ? new StopException(message) : new LlmUnavailableException(message, false, 0);
         }
         try {
             JsonNode text = mapper.readTree(res.body()).path("candidates").path(0).path("content").path("parts").path(0).path("text");
