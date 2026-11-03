@@ -48,10 +48,12 @@ public class SchemaMigrator implements CommandLineRunner {
         }
         if (!columnExists("order_item", "cancel_reason")) {
             log.info("Nâng cấp schema: lý do huỷ / trả lại món (cancel_reason, cancel_note, cancelled_by)");
-            jdbc.execute("ALTER TABLE order_item ADD COLUMN cancel_reason VARCHAR(20) NULL");
+            jdbc.execute("ALTER TABLE order_item ADD COLUMN cancel_reason VARCHAR(30) NULL");
             jdbc.execute("ALTER TABLE order_item ADD COLUMN cancel_note VARCHAR(200) NULL");
             jdbc.execute("ALTER TABLE order_item ADD COLUMN cancelled_by VARCHAR(50) NULL");
         }
+        // DB cũ tạo cột VARCHAR(20), không đủ cho CUSTOMER_CHANGED_MIND (21 ký tự)
+        jdbc.execute("ALTER TABLE order_item MODIFY COLUMN cancel_reason VARCHAR(30) NULL");
         if (!columnExists("menu_item", "vat_rate")) {
             log.info("Nâng cấp schema: thuế VAT theo món (menu_item.vat_rate, order_item.vat_rate)");
             jdbc.execute("ALTER TABLE menu_item ADD COLUMN vat_rate INT NOT NULL DEFAULT 8");

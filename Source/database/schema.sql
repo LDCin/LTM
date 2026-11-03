@@ -82,7 +82,7 @@ CREATE TABLE IF NOT EXISTS order_item (
     version      INT          NOT NULL DEFAULT 0,   -- optimistic locking
     station      VARCHAR(20)  NOT NULL,
     updated_at   BIGINT       NOT NULL,
-    cancel_reason VARCHAR(20) NULL,          -- bếp huỷ / khách trả lại sau khi bếp đã nhận: lý do
+    cancel_reason VARCHAR(30) NULL,          -- bếp huỷ / khách trả lại sau khi bếp đã nhận: lý do
     cancel_note  VARCHAR(200) NULL,
     cancelled_by VARCHAR(50)  NULL,
     vat_rate     INT          NOT NULL DEFAULT 0,   -- snapshot VAT (%) tại thời điểm đặt

@@ -207,6 +207,24 @@ class OrderFlowIntegrationTest {
     }
 
     @Test
+    void customerCancelsSinglePendingItem() {
+        String token = token("B11");
+        String device = device();
+        long session = join(token, device).get("sessionId").asLong();
+        HttpHeaders h = customerHeaders(token, device, session);
+        h.set("Idempotency-Key", UUID.randomUUID().toString());
+        JsonNode order = http.postForEntity("/api/orders",
+                json("{\"items\":[{\"menuItemId\":" + phoId + ",\"quantity\":1}]}", h), JsonNode.class).getBody();
+        long itemId = order.get("items").get(0).get("id").asLong();
+
+        ResponseEntity<JsonNode> r = http.postForEntity(
+                "/api/orders/" + order.get("id").asLong() + "/items/" + itemId + "/cancel",
+                new HttpEntity<>(customerHeaders(token, device, session)), JsonNode.class);
+        assertEquals(200, r.getStatusCode().value(), String.valueOf(r.getBody()));
+        assertEquals("CANCELLED", r.getBody().get("items").get(0).get("status").asText());
+    }
+
+    @Test
     void endedSessionIsRejectedAndAdminCannotCloseOccupiedTable() {
         String token = token("B05");
         long tableId = tableId("B05");
